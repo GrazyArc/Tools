@@ -1,2 +1,2 @@
-# exif-image-viewer
-offline viewer for exif, coded with github copilot
+# tools
+just a list of tools I use
