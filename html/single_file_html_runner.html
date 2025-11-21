@@ -6,7 +6,11 @@
   <select id="fileSelect"></select>
   <div id="status">No ZIP loaded</div>
 </header>
+
 <iframe id="stage" sandbox="allow-scripts allow-downloads" referrerpolicy="no-referrer"></iframe>
+
+<!-- fflate: ZIP extraction library -->
+<script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
 
 <script>
   const statusEl = document.getElementById('status');
@@ -21,7 +25,10 @@
     const raw = new TextDecoder().decode(entries[name]);
     const html = rewriteHtmlPaths(raw, (p) => {
       const baseDir = name.includes('/') ? name.slice(0, name.lastIndexOf('/') + 1) : '';
-      const rel = (baseDir + p).replace(/\\/g,'/').replace(/\/\.\//g,'/').replace(/\/[^\/]+\/\.\.\//g,'/');
+      const rel = (baseDir + p)
+        .replace(/\\/g,'/')
+        .replace(/\/\.\//g,'/')
+        .replace(/\/[^\/]+\/\.\.\//g,'/');
       return map[rel] || map[p] || null;
     });
     launchSite(html, map);
@@ -37,10 +44,20 @@
     const file = input.files?.[0];
     if (!file) return;
     statusEl.textContent = 'Reading ZIP…';
+
     const buf = new Uint8Array(await file.arrayBuffer());
 
-    // TODO: unzipSync logic here → fill entries
-    // TODO: build map of Blob URLs here
+    // 🔑 unzip with fflate
+    const unzipped = fflate.unzipSync(buf);
+
+    // Build entries and Blob URLs
+    entries = {};
+    map = {};
+    for (const [name, bytes] of Object.entries(unzipped)) {
+      entries[name] = bytes;
+      const type = "application/octet-stream"; // refine MIME if needed
+      map[name] = URL.createObjectURL(new Blob([bytes], { type }));
+    }
 
     // Populate dropdown with ALL files
     fileSelect.innerHTML = '';
