@@ -122,7 +122,25 @@
     function launchFile(name) {
       const raw = new TextDecoder().decode(entries[name]);
       const html = rewriteHtmlPaths(raw, (p) => map[p] || null);
-      stage.srcdoc = html;
+
+      // Inject fetch shim so Unity can load assets
+      const shim = `
+        <script>
+          const blobMap = ${JSON.stringify(map)};
+          const origFetch = window.fetch;
+          window.fetch = (url, opts) => {
+            if (blobMap[url]) return origFetch(blobMap[url], opts);
+            return origFetch(url, opts);
+          };
+          const origOpen = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function(method, url) {
+            if (blobMap[url]) url = blobMap[url];
+            return origOpen.apply(this, arguments);
+          };
+        </script>
+      `; // <-- properly closed backtick
+
+      stage.srcdoc = shim + html;
       statusEl.textContent = `Running: ${name}`;
     }
 
