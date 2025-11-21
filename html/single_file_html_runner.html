@@ -110,10 +110,41 @@
 
     let entries = {}, map = {};
 
+    // Utility: guess MIME type
+    function mimeType(name) {
+      if (name.endsWith('.js')) return 'application/javascript';
+      if (name.endsWith('.wasm')) return 'application/wasm';
+      if (name.endsWith('.data')) return 'application/octet-stream';
+      if (name.endsWith('.html') || name.endsWith('.htm')) return 'text/html';
+      return 'text/plain';
+    }
+
+    // Patch Unity HTML to replace resource paths with blob URLs
+    function patchUnityHtml(name) {
+      let raw = new TextDecoder().decode(entries[name]);
+      for (const [fname, blobUrl] of Object.entries(map)) {
+        // Replace only relative references
+        const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        raw = raw.replace(new RegExp(safe, 'g'), blobUrl);
+      }
+      return raw;
+    }
+
     function launchFile(name) {
-      const raw = new TextDecoder().decode(entries[name]);
-      stage.srcdoc = raw;
-      statusEl.textContent = `Running: ${name}`;
+      if (!entries[name]) return;
+      const isUnity = /\.html?$/.test(name) &&
+                      Object.keys(entries).some(f => f.endsWith('.wasm') || f.includes('UnityLoader.js'));
+
+      if (isUnity) {
+        const patched = patchUnityHtml(name);
+        const blob = new Blob([patched], { type: 'text/html' });
+        stage.src = URL.createObjectURL(blob);
+        statusEl.textContent = `Running Unity: ${name}`;
+      } else {
+        const raw = new TextDecoder().decode(entries[name]);
+        stage.srcdoc = raw;
+        statusEl.textContent = `Running: ${name}`;
+      }
     }
 
     fileSelect.addEventListener('change', () => {
@@ -137,7 +168,7 @@
       map = {};
       for (const [name, bytes] of Object.entries(unzipped)) {
         entries[name] = bytes;
-        map[name] = URL.createObjectURL(new Blob([bytes]));
+        map[name] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
       }
 
       progressBar.style.width = '90%';
@@ -168,7 +199,8 @@
       statusEl.textContent = `Loading ${file.name}…`;
 
       const raw = await file.text();
-      stage.srcdoc = raw;
+      const blob = new Blob([raw], { type: 'text/html' });
+      stage.src = URL.createObjectURL(blob);
       statusEl.textContent = `Running: ${file.name}`;
       fileSelect.innerHTML = '';
       const opt = document.createElement('option');
