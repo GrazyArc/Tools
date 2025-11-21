@@ -167,6 +167,7 @@
       if (lower.includes('.css')) return 'text/css';
       if (lower.includes('.wasm')) return 'application/wasm';
       if (lower.includes('.data')) return 'application/octet-stream';
+      if (lower.includes('.unityweb')) return 'application/octet-stream'; // Unity split files
       if (lower.includes('.json')) return 'application/json';
       if (lower.includes('.png')) return 'image/png';
       if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg';
@@ -177,6 +178,7 @@
       if (lower.includes('.mp4')) return 'video/mp4';
       return 'application/octet-stream';
     }
+
 
 
     // Build VFS payload and post to SW
@@ -226,7 +228,9 @@
     // Decide Unity build
     function isUnityBuild() {
       const names = Object.keys(entries).map(n => n.toLowerCase());
-      return names.some(n => n.includes('.wasm')) || names.some(n => n.includes('unityloader.js'));
+      return names.some(n => n.includes('.wasm')) ||
+            names.some(n => n.includes('.unityweb')) ||
+            names.some(n => n.includes('unityloader.js'));
     }
 
     // Launch file from ZIP via VFS
@@ -261,26 +265,33 @@
     zipInput.addEventListener('change', async () => {
       const file = zipInput.files?.[0];
       if (!file) return;
-      statusEl.textContent = 'Reading ZIP…';
+      statusEl.textContent = `Reading ZIP: ${file.name}…`;
 
       const buf = new Uint8Array(await file.arrayBuffer());
-      progressBar.style.width = '10%';
+      progressBar.style.width = '5%';
 
+      // Unzip
       const unzipped = fflate.unzipSync(buf);
-      progressBar.style.width = '60%';
+      const names = Object.keys(unzipped);
+      const total = names.length;
 
       entries = {};
       blobMap = {};
-      for (const [name, bytes] of Object.entries(unzipped)) {
+
+      // Process each file with progress updates
+      names.forEach((name, idx) => {
+        const bytes = unzipped[name];
         entries[name] = bytes;
         blobMap[name] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
-      }
 
-      progressBar.style.width = '90%';
+        // Update progress bar and status
+        const percent = Math.round(((idx + 1) / total) * 80) + 10; // 10–90% range
+        progressBar.style.width = percent + '%';
+        statusEl.textContent = `Extracting ${idx + 1}/${total}: ${name}`;
+      });
 
       // Populate selection
       fileSelect.innerHTML = '';
-      const names = Object.keys(entries);
       names.forEach(n => {
         const opt = document.createElement('option');
         opt.value = n;
@@ -288,16 +299,19 @@
         fileSelect.appendChild(opt);
       });
 
-      // Auto-select a likely entry point
-      const entry = names.find(n => /index\.html?$/i.test(n)) || names.find(n => /\.html?$/i.test(n)) || names[0];
+      // Auto-select entry point
+      const entry = names.find(n => /index\.html?$/i.test(n)) ||
+                    names.find(n => /\.html?$/i.test(n)) ||
+                    names[0];
 
       if (entry) {
         fileSelect.value = entry;
         await launchFile(entry);
         progressBar.style.width = '100%';
-        setTimeout(() => progressBar.style.width = '0%', 1000);
+        statusEl.textContent = `Finished extraction (${total} files). Running: ${entry}`;
+        setTimeout(() => progressBar.style.width = '0%', 1500);
       } else {
-        statusEl.textContent = 'No files found in ZIP.';
+        statusEl.textContent = 'No HTML entry point found in ZIP.';
         progressBar.style.width = '0%';
       }
     });
