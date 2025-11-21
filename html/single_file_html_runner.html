@@ -161,21 +161,23 @@
     }
 
     function mimeType(name) {
-      if (name.endsWith('.html') || name.endsWith('.htm')) return 'text/html';
-      if (name.endsWith('.js')) return 'application/javascript';
-      if (name.endsWith('.css')) return 'text/css';
-      if (name.endsWith('.wasm')) return 'application/wasm';
-      if (name.endsWith('.data')) return 'application/octet-stream';
-      if (name.endsWith('.json')) return 'application/json';
-      if (name.endsWith('.png')) return 'image/png';
-      if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
-      if (name.endsWith('.gif')) return 'image/gif';
-      if (name.endsWith('.webp')) return 'image/webp';
-      if (name.endsWith('.mp3')) return 'audio/mpeg';
-      if (name.endsWith('.ogg')) return 'audio/ogg';
-      if (name.endsWith('.mp4')) return 'video/mp4';
+      const lower = name.toLowerCase();
+      if (lower.includes('.html') || lower.includes('.htm')) return 'text/html';
+      if (lower.includes('.js')) return 'application/javascript';
+      if (lower.includes('.css')) return 'text/css';
+      if (lower.includes('.wasm')) return 'application/wasm';
+      if (lower.includes('.data')) return 'application/octet-stream';
+      if (lower.includes('.json')) return 'application/json';
+      if (lower.includes('.png')) return 'image/png';
+      if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg';
+      if (lower.includes('.gif')) return 'image/gif';
+      if (lower.includes('.webp')) return 'image/webp';
+      if (lower.includes('.mp3')) return 'audio/mpeg';
+      if (lower.includes('.ogg')) return 'audio/ogg';
+      if (lower.includes('.mp4')) return 'video/mp4';
       return 'application/octet-stream';
     }
+
 
     // Build VFS payload and post to SW
     async function loadIntoVfs() {
@@ -223,8 +225,8 @@
 
     // Decide Unity build
     function isUnityBuild() {
-      const names = Object.keys(entries);
-      return names.some(n => n.endsWith('.wasm')) || names.some(n => /UnityLoader\.js|UnityProgress\.js/i.test(n));
+      const names = Object.keys(entries).map(n => n.toLowerCase());
+      return names.some(n => n.includes('.wasm')) || names.some(n => n.includes('unityloader.js'));
     }
 
     // Launch file from ZIP via VFS
