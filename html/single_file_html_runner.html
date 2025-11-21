@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>ZIP Runner</title>
+  <title>ZIP/HTML Runner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { color-scheme: dark; }
@@ -40,7 +40,6 @@
       box-shadow: 0 2px 4px rgba(0,0,0,0.5);
     }
     #status { flex: 1; font-size: 14px; opacity: 0.8; }
-
     #stage {
       width: 100%;
       height: calc(100vh - 70px);
@@ -48,8 +47,6 @@
       border-radius: 12px;
       box-shadow: 0 0 12px rgba(0,0,0,0.7);
     }
-
-    /* Fullscreen button */
     #fullscreenBtn {
       position: fixed;
       top: 12px;
@@ -67,8 +64,6 @@
       z-index: 1000;
     }
     #fullscreenBtn:hover { opacity: 1; }
-
-    /* Progress bar */
     #progressContainer {
       position: fixed;
       bottom: 0;
@@ -91,8 +86,12 @@
       <strong>Select ZIP</strong>
       <input id="zip" type="file" accept=".zip" />
     </label>
+    <label class="btn">
+      <strong>Select HTML</strong>
+      <input id="htmlFile" type="file" accept=".html,.htm" />
+    </label>
     <select id="fileSelect"></select>
-    <div id="status">No ZIP loaded</div>
+    <div id="status">No file loaded</div>
   </header>
 
   <iframe id="stage" sandbox="allow-scripts allow-downloads" referrerpolicy="no-referrer"></iframe>
@@ -103,22 +102,17 @@
   <script>
     const statusEl = document.getElementById('status');
     const stage = document.getElementById('stage');
-    const input = document.getElementById('zip');
+    const zipInput = document.getElementById('zip');
+    const htmlInput = document.getElementById('htmlFile');
     const fileSelect = document.getElementById('fileSelect');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
     const progressBar = document.getElementById('progressBar');
 
     let entries = {}, map = {};
 
-    function ext(name) {
-      const i = name.lastIndexOf(".");
-      return i === -1 ? "" : name.slice(i+1).toLowerCase();
-    }
-
     function launchFile(name) {
       const raw = new TextDecoder().decode(entries[name]);
-      const html = raw; // keep simple, or apply rewriteHtmlPaths if needed
-      stage.srcdoc = html;
+      stage.srcdoc = raw;
       statusEl.textContent = `Running: ${name}`;
     }
 
@@ -127,26 +121,23 @@
       if (name) launchFile(name);
     });
 
-    input.addEventListener('change', async () => {
-      const file = input.files?.[0];
+    // Handle ZIP upload
+    zipInput.addEventListener('change', async () => {
+      const file = zipInput.files?.[0];
       if (!file) return;
       statusEl.textContent = 'Reading ZIP…';
 
       const buf = new Uint8Array(await file.arrayBuffer());
-
-      // Show progress bar during unzip
       progressBar.style.width = '10%';
 
       const unzipped = fflate.unzipSync(buf);
-
       progressBar.style.width = '60%';
 
       entries = {};
       map = {};
       for (const [name, bytes] of Object.entries(unzipped)) {
         entries[name] = bytes;
-        const type = "application/octet-stream";
-        map[name] = URL.createObjectURL(new Blob([bytes], { type }));
+        map[name] = URL.createObjectURL(new Blob([bytes]));
       }
 
       progressBar.style.width = '90%';
@@ -168,6 +159,23 @@
         statusEl.textContent = 'No files found in ZIP.';
         progressBar.style.width = '0%';
       }
+    });
+
+    // Handle single HTML upload
+    htmlInput.addEventListener('change', async () => {
+      const file = htmlInput.files?.[0];
+      if (!file) return;
+      statusEl.textContent = `Loading ${file.name}…`;
+
+      const raw = await file.text();
+      stage.srcdoc = raw;
+      statusEl.textContent = `Running: ${file.name}`;
+      fileSelect.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.value = file.name;
+      opt.textContent = file.name;
+      fileSelect.appendChild(opt);
+      fileSelect.value = file.name;
     });
 
     // Fullscreen toggle
