@@ -16,6 +16,12 @@
 
   let entries = {}, map = {};
 
+  // Helper: get lowercase extension
+  function ext(name) {
+    const i = name.lastIndexOf(".");
+    return i === -1 ? "" : name.slice(i+1).toLowerCase();
+  }
+
   function launchHtml(name) {
     const raw = new TextDecoder().decode(entries[name]);
     const html = rewriteHtmlPaths(raw, (p) => {
@@ -38,11 +44,15 @@
     statusEl.textContent = 'Reading ZIP…';
     const buf = new Uint8Array(await file.arrayBuffer());
 
-    // unzipSync logic (same as before) → fill entries
-    // build map of Blob URLs (same as before)
+    // TODO: unzipSync logic here → fill entries
+    // TODO: build map of Blob URLs here
 
-    // Populate dropdown
-    const htmlFiles = Object.keys(entries).filter(n => ext(n) === 'html');
+    // Detect HTML files (case-insensitive, includes .htm)
+    const htmlFiles = Object.keys(entries).filter(n => {
+      const e = ext(n);
+      return e === 'html' || e === 'htm';
+    });
+
     htmlSelect.innerHTML = '';
     htmlFiles.forEach(n => {
       const opt = document.createElement('option');
