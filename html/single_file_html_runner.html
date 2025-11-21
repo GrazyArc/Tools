@@ -110,9 +110,19 @@
 
     let entries = {}, map = {};
 
+    // Rewrite relative paths in HTML to Blob URLs
+    function rewriteHtmlPaths(html, mapper) {
+      return html.replace(/(src|href)\s*=\s*["']([^"']+)["']/gi, (m, attr, val) => {
+        if (/^(data:|https?:|\/\/)/i.test(val)) return m;
+        const mapped = mapper(val);
+        return `${attr}="${mapped || val}"`;
+      });
+    }
+
     function launchFile(name) {
       const raw = new TextDecoder().decode(entries[name]);
-      stage.srcdoc = raw;
+      const html = rewriteHtmlPaths(raw, (p) => map[p] || null);
+      stage.srcdoc = html;
       statusEl.textContent = `Running: ${name}`;
     }
 
