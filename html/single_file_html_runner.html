@@ -90,6 +90,10 @@
       <strong>Select HTML</strong>
       <input id="htmlFile" type="file" accept=".html,.htm" />
     </label>
+    <label class="btn">
+      <strong>Select SWF</strong>
+      <input id="swfFile" type="file" accept=".swf" />
+    </label>
     <select id="fileSelect"></select>
     <div id="status">No file loaded</div>
   </header>
@@ -98,228 +102,213 @@
   <button id="fullscreenBtn">⛶</button>
   <div id="progressContainer"><div id="progressBar"></div></div>
 
-<script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
-<script>
-  const statusEl = document.getElementById('status');
-  const stage = document.getElementById('stage');
-  const zipInput = document.getElementById('zip');
-  const htmlInput = document.getElementById('htmlFile');
-  const fileSelect = document.getElementById('fileSelect');
-  const fullscreenBtn = document.getElementById('fullscreenBtn');
-  const progressBar = document.getElementById('progressBar');
-  const header = document.querySelector('header');
+  <script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
+  <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+    const stage = document.getElementById('stage');
+    const zipInput = document.getElementById('zip');
+    const htmlInput = document.getElementById('htmlFile');
+    const swfInput = document.getElementById('swfFile');
+    const fileSelect = document.getElementById('fileSelect');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const progressBar = document.getElementById('progressBar');
 
-  let entries = {};
-  let blobMap = {};
+    let entries = {};
+    let blobMap = {};
 
-  function mimeType(name) {
-    const lower = name.toLowerCase();
-    if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html';
-    if (lower.endsWith('.js')) return 'application/javascript';
-    if (lower.endsWith('.css')) return 'text/css';
-    if (lower.endsWith('.wasm')) return 'application/wasm';
-    if (lower.includes('.data') || lower.includes('.unityweb')) return 'application/octet-stream';
-    if (lower.endsWith('.json')) return 'application/json';
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.mp3')) return 'audio/mpeg';
-    if (lower.endsWith('.ogg')) return 'audio/ogg';
-    if (lower.endsWith('.mp4')) return 'video/mp4';
-    return 'application/octet-stream';
-  }
-
-  // Patch HTML/JS to replace resource paths with blob URLs
-  function patchHtmlWithBlobs(name) {
-    let raw = new TextDecoder().decode(entries[name]);
-
-    // Rewrite file:// references
-    raw = raw.replace(/file:\/\/\/?([^\s"'>]+)/g, (match, path) => {
-      const clean = path.replace(/^\/+/, '');
-      if (blobMap[clean]) {
-        console.log('Rewriting file:// reference:', match, '→', blobMap[clean]);
-        return blobMap[clean];
-      }
-      console.warn('Unresolved file:// reference:', path);
-      return match;
-    });
-
-    // Rewrite src/href/poster attributes (includes <a href>)
-    raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/g, (match, attr, path) => {
-      const clean = path.replace(/^\/+/, '');
-
-      // Skip external links (http, https, //)
-      if (/^(https?:)?\/\//i.test(path)) {
-        console.log(`External ${attr}, leaving as-is:`, path);
-        return match;
-      }
-
-      if (blobMap[clean]) {
-        console.log(`Rewriting ${attr}:`, path, '→', blobMap[clean]);
-        return `${attr}="${blobMap[clean]}"`;
-      }
-
-      console.warn(`Unresolved ${attr}:`, path);
-      return match;
-    });
-
-    // Rewrite quoted string literals inside JS/HTML that match filenames
-    for (const [fname, blobUrl] of Object.entries(blobMap)) {
-      const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const re = new RegExp(`["']${safe}["']`, 'g');
-      if (re.test(raw)) {
-        console.log('Rewriting string literal:', fname, '→', blobUrl);
-        raw = raw.replace(re, `"${blobUrl}"`);
-      }
+    function mimeType(name) {
+      const lower = name.toLowerCase();
+      if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html';
+      if (lower.endsWith('.js')) return 'application/javascript';
+      if (lower.endsWith('.css')) return 'text/css';
+      if (lower.endsWith('.wasm')) return 'application/wasm';
+      if (lower.includes('.data') || lower.includes('.unityweb')) return 'application/octet-stream';
+      if (lower.endsWith('.json')) return 'application/json';
+      if (lower.endsWith('.png')) return 'image/png';
+      if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+      if (lower.endsWith('.gif')) return 'image/gif';
+      if (lower.endsWith('.webp')) return 'image/webp';
+      if (lower.endsWith('.mp3')) return 'audio/mpeg';
+      if (lower.endsWith('.ogg')) return 'audio/ogg';
+      if (lower.endsWith('.mp4')) return 'video/mp4';
+      if (lower.endsWith('.swf')) return 'application/x-shockwave-flash';
+      return 'application/octet-stream';
     }
 
-    return raw;
-  }
+    function patchHtmlWithBlobs(name) {
+      let raw = new TextDecoder().decode(entries[name]);
+      raw = raw.replace(/file:\/\/\/?([^\s"'>]+)/g, (match, path) => {
+        const clean = path.replace(/^\/+/, '');
+        if (blobMap[clean]) return blobMap[clean];
+        return match;
+      });
+      raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/g, (match, attr, path) => {
+        const clean = path.replace(/^\/+/, '');
+        if (/^(https?:)?\/\//i.test(path)) return match;
+        if (blobMap[clean]) return `${attr}="${blobMap[clean]}"`;
+        return match;
+      });
+      for (const [fname, blobUrl] of Object.entries(blobMap)) {
+        const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const re = new RegExp(`["']${safe}["']`, 'g');
+        raw = raw.replace(re, `"${blobUrl}"`);
+      }
+      return raw;
+    }
 
-  async function launchFile(name) {
-    if (!entries[name]) return;
-    const patched = patchHtmlWithBlobs(name);
-    const blob = new Blob([patched], { type: 'text/html' });
-    stage.src = URL.createObjectURL(blob);
-    statusEl.textContent = `Running: ${name}`;
-  }
+    async function launchFile(name) {
+      if (!entries[name]) return;
+      const shortName = name.replace(/^[^/]+\//, '');
+      if (shortName.toLowerCase().endsWith('.swf')) {
+        const blobUrl = blobMap[shortName];
+        const container = document.createElement('div');
+        container.style.width = "100%";
+        container.style.height = "80vh";
+        const ruffle = window.RufflePlayer.newest();
+        const player = ruffle.createPlayer();
+        container.appendChild(player);
+        stage.replaceWith(container);
+        player.load(blobUrl);
+        statusEl.textContent = `Running SWF: ${name}`;
+        return;
+      }
+      const patched = patchHtmlWithBlobs(name);
+      const blob = new Blob([patched], { type: 'text/html' });
+      stage.src = URL.createObjectURL(blob);
+      statusEl.textContent = `Running: ${name}`;
+    }
 
-  fileSelect.addEventListener('change', () => {
-    const name = fileSelect.value;
-    if (name) launchFile(name);
-  });
+    fileSelect.addEventListener('change', () => {
+      const name = fileSelect.value;
+      if (name) launchFile(name);
+    });
 
-  zipInput.addEventListener('change', async () => {
-    const file = zipInput.files?.[0];
-    if (!file) return;
-    statusEl.textContent = `Reading ZIP: ${file.name}…`;
-    const buf = new Uint8Array(await file.arrayBuffer());
-    progressBar.style.width = '5%';
+    zipInput.addEventListener('change', async () => {
+      const file = zipInput.files?.[0];
+      if (!file) return;
+      statusEl.textContent = `Reading ZIP: ${file.name}…`;
+      const buf = new Uint8Array(await file.arrayBuffer());
+      progressBar.style.width = '5%';
 
-    const unzipped = fflate.unzipSync(buf);
-    const names = Object.keys(unzipped);
-    const total = names.length;
-    entries = {};
-    blobMap = {};
+      const unzipped = fflate.unzipSync(buf);
+      const names = Object.keys(unzipped);
+      const total = names.length;
+      entries = {};
+      blobMap = {};
 
-    for (let idx = 0; idx < names.length; idx++) {
-      const name = names[idx];
-      try {
+      for (let idx = 0; idx < names.length; idx++) {
+        const name = names[idx];
         const bytes = unzipped[name];
         entries[name] = bytes;
-
-        // normalize: strip leading folder (e.g. "twitch-tetris/")
         const shortName = name.replace(/^[^/]+\//, '');
-
         blobMap[shortName] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
         const percent = Math.round(((idx + 1) / total) * 80) + 10;
         progressBar.style.width = percent + '%';
-        const sizeKB = (bytes.length / 1024).toFixed(1);
-        statusEl.textContent = `Extracting ${idx + 1}/${total}: ${name} (${sizeKB} KB)`;
-      } catch (err) {
-        console.error('Error extracting', name, err);
-        statusEl.textContent = `Error extracting ${name}`;
       }
-    }
 
-    console.log('blobMap keys (normalized):', Object.keys(blobMap));
+      fileSelect.innerHTML = '';
+      const runnableNames = names.filter(n => /\.html?$/i.test(n));
+      runnableNames.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        fileSelect.appendChild(opt);
+      });
 
-    // Only show runnable HTML files in the dropdown
-    fileSelect.innerHTML = '';
-    const runnableNames = names.filter(n => /\.html?$/i.test(n));
-    runnableNames.forEach(n => {
-      const opt = document.createElement('option');
-      opt.value = n;
-      opt.textContent = n;
-      fileSelect.appendChild(opt);
+      const entry = runnableNames.find(n => /index\.html?$/i.test(n)) || runnableNames[0];
+      if (entry) {
+        fileSelect.value = entry;
+        await launchFile(entry);
+        progressBar.style.width = '100%';
+        statusEl.textContent = `Finished extraction (${total} files). Running: ${entry}`;
+        setTimeout(() => progressBar.style.width = '0%', 1500);
+      } else {
+        statusEl.textContent = 'No HTML entry point found in ZIP.';
+        progressBar.style.width = '0%';
+      }
     });
 
-    const entry = runnableNames.find(n => /index\.html?$/i.test(n)) ||
-                  runnableNames[0];
-    if (entry) {
-      fileSelect.value = entry;
-      await launchFile(entry);
-      progressBar.style.width = '100%';
-      statusEl.textContent = `Finished extraction (${total} files). Running: ${entry}`;
-      setTimeout(() => progressBar.style.width = '0%', 1500);
-    } else {
-      statusEl.textContent = 'No HTML entry point found in ZIP.';
-      progressBar.style.width = '0%';
-    }
-  });
+    htmlInput.addEventListener('change', async () => {
+      const file = htmlInput.files?.[0];
+      if (!file) return;
+      statusEl.textContent = `Loading ${file.name}…`;
+      const raw = await file.text();
+      const blob = new Blob([raw], { type: 'text/html' });
+      stage.src = URL.createObjectURL(blob);
+      statusEl.textContent = `Running: ${file.name}`;
+      fileSelect.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.value = file.name;
+      opt.textContent = file.name;
+      fileSelect.appendChild(opt);
+      fileSelect.value = file.name;
+    });
 
-  htmlInput.addEventListener('change', async () => {
-    const file = htmlInput.files?.[0];
-    if (!file) return;
-    statusEl.textContent = `Loading ${file.name}…`;
-    const raw = await file.text();
-    const blob = new Blob([raw], { type: 'text/html' });
-    stage.src = URL.createObjectURL(blob);
-    statusEl.textContent = `Running: ${file.name}`;
-    fileSelect.innerHTML = '';
-    const opt = document.createElement('option');
-    opt.value = file.name;
-    opt.textContent = file.name;
-    fileSelect.appendChild(opt);
-    fileSelect.value = file.name;
-  });
+    // NEW: SWF input handler
+    swfInput.addEventListener('change', async () => {
+      const file = swfInput.files?.[0];
+      if (!file) return;
+      statusEl.textContent = `Loading SWF: ${file.name}…`;
+      const blobUrl = URL.createObjectURL(file);
 
-  // Fullscreen toggle with fallbacks
-  fullscreenBtn.addEventListener('click', () => {
-    const elem = stage;
-    if (!document.fullscreenElement &&
-        !document.webkitFullscreenElement &&
-        !document.msFullscreenElement) {
-      if (elem.requestFullscreen) {
-        elem.requestFullscreen();
-      } else if (elem.webkitRequestFullscreen) {
-        elem.webkitRequestFullscreen();
-      } else if (elem.msRequestFullscreen) {
-        elem.msRequestFullscreen();
-      } else if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen();
+      // Create container sized like the iframe
+      const container = document.createElement('div');
+      container.id = "swfStage";
+      container.style.width = "100%";
+      container.style.height = stage.style.height || "80vh"; // match iframe height
+      container.style.display = "block";
+
+      // Create Ruffle player
+      const ruffle = window.RufflePlayer.newest();
+      const player = ruffle.createPlayer();
+      player.style.width = "100%";
+      player.style.height = "100%";
+
+      container.appendChild(player);
+
+      // Replace iframe with SWF container
+      stage.replaceWith(container);
+
+      player.load(blobUrl);
+      statusEl.textContent = `Running SWF: ${file.name}`;
+    });
+
+
+    fullscreenBtn.addEventListener('click', () => {
+      const elem = stage;
+      if (!document.fullscreenElement) {
+        if (elem.requestFullscreen) elem.requestFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
       }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
-      } else if (document.msExitFullscreen) {
-        document.msExitFullscreen();
+    });
+
+    stage.setAttribute("tabindex", "0");
+    stage.addEventListener("load", () => {
+      stage.focus();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+        e.preventDefault();
       }
-    }
-  });
-
-  // Ensure the iframe grabs focus when loaded
-  stage.setAttribute("tabindex", "0"); // make iframe focusable
-  stage.addEventListener("load", () => {
-    stage.focus();
-    console.log("Stage iframe focused for keyboard input");
-  });
-
-  // Forward key events from parent to iframe if needed
-  window.addEventListener("keydown", (e) => {
-    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
-      e.preventDefault();
-    }
-    if (stage.contentWindow) {
-      const forwarded = new KeyboardEvent("keydown", {
-        key: e.key,
-        code: e.code,
-        keyCode: e.keyCode,
-        which: e.which,
-        altKey: e.altKey,
-        ctrlKey: e.ctrlKey,
-        shiftKey: e.shiftKey,
-        metaKey: e.metaKey,
-        bubbles: true,
-        cancelable: true
-      });
-      stage.contentWindow.dispatchEvent(forwarded);
-    }
-  });
-</script>
+      if (stage.contentWindow) {
+        const forwarded = new KeyboardEvent("keydown", {
+          key: e.key,
+          code: e.code,
+          keyCode: e.keyCode,
+          which: e.which,
+          altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
+          shiftKey: e.shiftKey,
+          metaKey: e.metaKey,
+          bubbles: true,
+          cancelable: true
+        });
+        stage.contentWindow.dispatchEvent(forwarded);
+      }
+    });
+  </script>
 </body>
 </html>
-
