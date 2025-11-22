@@ -145,13 +145,21 @@
       return match;
     });
 
-    // Rewrite src/href/poster attributes
+    // Rewrite src/href/poster attributes (includes <a href>)
     raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/g, (match, attr, path) => {
       const clean = path.replace(/^\/+/, '');
+
+      // Skip external links (http, https, //)
+      if (/^(https?:)?\/\//i.test(path)) {
+        console.log(`External ${attr}, leaving as-is:`, path);
+        return match;
+      }
+
       if (blobMap[clean]) {
         console.log(`Rewriting ${attr}:`, path, '→', blobMap[clean]);
         return `${attr}="${blobMap[clean]}"`;
       }
+
       console.warn(`Unresolved ${attr}:`, path);
       return match;
     });
@@ -217,17 +225,18 @@
 
     console.log('blobMap keys (normalized):', Object.keys(blobMap));
 
+    // Only show runnable HTML files in the dropdown
     fileSelect.innerHTML = '';
-    names.forEach(n => {
+    const runnableNames = names.filter(n => /\.html?$/i.test(n));
+    runnableNames.forEach(n => {
       const opt = document.createElement('option');
       opt.value = n;
       opt.textContent = n;
       fileSelect.appendChild(opt);
     });
 
-    const entry = names.find(n => /index\.html?$/i.test(n)) ||
-                  names.find(n => /\.html?$/i.test(n)) ||
-                  names[0];
+    const entry = runnableNames.find(n => /index\.html?$/i.test(n)) ||
+                  runnableNames[0];
     if (entry) {
       fileSelect.value = entry;
       await launchFile(entry);
@@ -282,7 +291,7 @@
     }
   });
 
-    // Ensure the iframe grabs focus when loaded
+  // Ensure the iframe grabs focus when loaded
   stage.setAttribute("tabindex", "0"); // make iframe focusable
   stage.addEventListener("load", () => {
     stage.focus();
@@ -291,38 +300,26 @@
 
   // Forward key events from parent to iframe if needed
   window.addEventListener("keydown", (e) => {
-    // prevent Google Sites from scrolling with arrow keys
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
       e.preventDefault();
     }
-    // send the event into the iframe
     if (stage.contentWindow) {
-      stage.contentWindow.dispatchEvent(new KeyboardEvent("keydown", e));
+      const forwarded = new KeyboardEvent("keydown", {
+        key: e.key,
+        code: e.code,
+        keyCode: e.keyCode,
+        which: e.which,
+        altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
+        shiftKey: e.shiftKey,
+        metaKey: e.metaKey,
+        bubbles: true,
+        cancelable: true
+      });
+      stage.contentWindow.dispatchEvent(forwarded);
     }
-  });
-
-  // Auto-hide header bar
-  setTimeout(() => {
-    header.classList.add('hidden');
-  }, 2000);
-
-  document.addEventListener('mousemove', (e) => {
-    if (e.clientY < 50) {
-      header.classList.remove('hidden');
-    } else {
-      if (!header.matches(':hover')) {
-        header.classList.add('hidden');
-      }
-    }
-  });
-
-  header.addEventListener('mouseenter', () => {
-    header.classList.remove('hidden');
-  });
-
-  header.addEventListener('mouseleave', () => {
-    header.classList.add('hidden');
   });
 </script>
 </body>
 </html>
+
