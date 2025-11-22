@@ -98,252 +98,206 @@
   <button id="fullscreenBtn">⛶</button>
   <div id="progressContainer"><div id="progressBar"></div></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
-  <script>
-    const statusEl = document.getElementById('status');
-    const stage = document.getElementById('stage');
-    const zipInput = document.getElementById('zip');
-    const htmlInput = document.getElementById('htmlFile');
-    const fileSelect = document.getElementById('fileSelect');
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
-    const progressBar = document.getElementById('progressBar');
+<script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
+<script>
+  const statusEl = document.getElementById('status');
+  const stage = document.getElementById('stage');
+  const zipInput = document.getElementById('zip');
+  const htmlInput = document.getElementById('htmlFile');
+  const fileSelect = document.getElementById('fileSelect');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const progressBar = document.getElementById('progressBar');
 
-    let entries = {};      // name -> Uint8Array
-    let blobMap = {};      // name -> Blob URL (for fallback)
-    let vfsReady = false;  // service worker ready state
-    let vfsFiles = {};     // name -> { bytes, type }
+  let entries = {};      // name -> Uint8Array
+  let blobMap = {};      // name -> Blob URL (for fallback)
+  let vfsReady = false;  // service worker ready state
+  let vfsFiles = {};     // name -> { bytes, type }
 
-    // --- Service Worker (in-page) ---
-    async function ensureVfsServiceWorker() {
-      if ('serviceWorker' in navigator) {
-        if (vfsReady) return;
-        const swCode = `
-          const files = new Map();
-          self.addEventListener('message', (e) => {
-            const { type, payload } = e.data || {};
-            if (type === 'VFS_SET') {
-              // payload: [{ path, bytes, mime }]
-              for (const f of payload) {
-                files.set('/vfs/' + f.path, { bytes: f.bytes, mime: f.mime });
-              }
-              // Keep a simple index page for debugging
-              const list = Array.from(files.keys()).map(k => '<li>' + k + '</li>').join('');
-              const indexHtml = '<!doctype html><meta charset=utf-8><base href="/vfs/"><ul>' + list + '</ul>';
-              files.set('/vfs/index.html', { bytes: new TextEncoder().encode(indexHtml), mime: 'text/html' });
-              // Ack
-              self.clients.matchAll().then(clients => {
-                for (const c of clients) c.postMessage({ type: 'VFS_READY' });
-              });
+  // --- Service Worker (in-page) ---
+  async function ensureVfsServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      if (vfsReady) return;
+      const swCode = `
+        const files = new Map();
+        self.addEventListener('message', (e) => {
+          const { type, payload } = e.data || {};
+          if (type === 'VFS_SET') {
+            for (const f of payload) {
+              files.set('/vfs/' + f.path, { bytes: f.bytes, mime: f.mime });
             }
-          });
-
-          self.addEventListener('fetch', (event) => {
-            const url = new URL(event.request.url);
-            if (url.pathname.startsWith('/vfs/')) {
-              const file = files.get(url.pathname);
-              if (file) {
-                event.respondWith(new Response(file.bytes, {
-                  status: 200,
-                  headers: { 'Content-Type': file.mime }
-                }));
-                return;
-              }
-              event.respondWith(new Response('Not found', { status: 404 }));
-            }
-          });
-        `;
-        const blob = new Blob([swCode], { type: 'application/javascript' });
-        const swUrl = URL.createObjectURL(blob);
-        const reg = await navigator.serviceWorker.register(swUrl);
-        await navigator.serviceWorker.ready;
-        vfsReady = true;
-      }
-    }
-
-    function mimeType(name) {
-      const lower = name.toLowerCase();
-      if (lower.includes('.html') || lower.includes('.htm')) return 'text/html';
-      if (lower.includes('.js')) return 'application/javascript';
-      if (lower.includes('.css')) return 'text/css';
-      if (lower.includes('.wasm')) return 'application/wasm';
-      if (lower.includes('.data')) return 'application/octet-stream';
-      if (lower.includes('.unityweb')) return 'application/octet-stream'; // Unity split files
-      if (lower.includes('.json')) return 'application/json';
-      if (lower.includes('.png')) return 'image/png';
-      if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg';
-      if (lower.includes('.gif')) return 'image/gif';
-      if (lower.includes('.webp')) return 'image/webp';
-      if (lower.includes('.mp3')) return 'audio/mpeg';
-      if (lower.includes('.ogg')) return 'audio/ogg';
-      if (lower.includes('.mp4')) return 'video/mp4';
-      return 'application/octet-stream';
-    }
-
-
-
-    // Build VFS payload and post to SW
-    async function loadIntoVfs() {
-      await ensureVfsServiceWorker();
-      const files = Object.entries(entries).map(([path, bytes]) => ({
-        path,
-        bytes,
-        mime: mimeType(path)
-      }));
-      vfsFiles = {};
-      for (const f of files) vfsFiles[f.path] = { bytes: f.bytes, type: f.mime };
-
-      // Send to SW
-      navigator.serviceWorker.controller?.postMessage({ type: 'VFS_SET', payload: files });
-
-      // Wait for ack (first time)
-      return new Promise((resolve) => {
-        const onMsg = (e) => {
-          if (e.data && e.data.type === 'VFS_READY') {
-            navigator.serviceWorker.removeEventListener('message', onMsg);
-            resolve();
+            const list = Array.from(files.keys()).map(k => '<li>' + k + '</li>').join('');
+            const indexHtml = '<!doctype html><meta charset=utf-8><base href="/vfs/"><ul>' + list + '</ul>';
+            files.set('/vfs/index.html', { bytes: new TextEncoder().encode(indexHtml), mime: 'text/html' });
+            self.clients.matchAll().then(clients => {
+              for (const c of clients) c.postMessage({ type: 'VFS_READY' });
+            });
           }
-        };
-        navigator.serviceWorker.addEventListener('message', onMsg);
-        // In case SW already ready
-        setTimeout(() => resolve(), 200);
-      });
+        });
+        self.addEventListener('fetch', (event) => {
+          const url = new URL(event.request.url);
+          if (url.pathname.startsWith('/vfs/')) {
+            const file = files.get(url.pathname);
+            if (file) {
+              event.respondWith(new Response(file.bytes, {
+                status: 200,
+                headers: { 'Content-Type': file.mime }
+              }));
+              return;
+            }
+            event.respondWith(new Response('Not found', { status: 404 }));
+          }
+        });
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      const swUrl = URL.createObjectURL(blob);
+      await navigator.serviceWorker.register(swUrl);
+      await navigator.serviceWorker.ready;
+      vfsReady = true;
     }
+  }
 
-    // Create an HTML wrapper that injects <base href="/vfs/">
-    function wrapWithBase(htmlBytes) {
-      const raw = new TextDecoder().decode(htmlBytes);
-      const hasHead = /<head[^>]*>/i.test(raw);
-      const baseTag = '<base href="/vfs/">';
-      if (hasHead) {
-        return raw.replace(/<head[^>]*>/i, (m) => m + baseTag);
-      }
-      // No <head>, inject into <html>
-      if (/<html[^>]*>/i.test(raw)) {
-        return raw.replace(/<html[^>]*>/i, (m) => m + '<head>' + baseTag + '</head>');
-      }
-      // Fallback: prepend
-      return '<head>' + baseTag + '</head>' + raw;
-    }
+  function mimeType(name) {
+    const lower = name.toLowerCase();
+    if (lower.includes('.html') || lower.includes('.htm')) return 'text/html';
+    if (lower.includes('.js')) return 'application/javascript';
+    if (lower.includes('.css')) return 'text/css';
+    if (lower.includes('.wasm')) return 'application/wasm';
+    if (lower.includes('.data')) return 'application/octet-stream';
+    if (lower.includes('.unityweb')) return 'application/octet-stream';
+    if (lower.includes('.json')) return 'application/json';
+    if (lower.includes('.png')) return 'image/png';
+    if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg';
+    if (lower.includes('.gif')) return 'image/gif';
+    if (lower.includes('.webp')) return 'image/webp';
+    if (lower.includes('.mp3')) return 'audio/mpeg';
+    if (lower.includes('.ogg')) return 'audio/ogg';
+    if (lower.includes('.mp4')) return 'video/mp4';
+    return 'application/octet-stream';
+  }
 
-    // Decide Unity build
-    function isUnityBuild() {
-      const names = Object.keys(entries).map(n => n.toLowerCase());
-      return names.some(n => n.includes('.wasm')) ||
-            names.some(n => n.includes('.unityweb')) ||
-            names.some(n => n.includes('unityloader.js'));
-    }
-
-    // Launch file from ZIP via VFS
-    async function launchFile(name) {
-      if (!entries[name]) return;
-
-      const unity = isUnityBuild();
-
-      if (unity) {
-        // Serve everything under /vfs/ and ensure relative paths resolve
-        await loadIntoVfs();
-        const wrapped = wrapWithBase(entries[name]);
-        const blob = new Blob([wrapped], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        // Use src (not srcdoc) so Unity can fetch relative resources
-        stage.src = url;
-        statusEl.textContent = `Running Unity: ${name}`;
-      } else {
-        // Non-Unity: keep your original srcdoc behavior
-        const raw = new TextDecoder().decode(entries[name]);
-        stage.srcdoc = raw;
-        statusEl.textContent = `Running: ${name}`;
-      }
-    }
-
-    fileSelect.addEventListener('change', () => {
-      const name = fileSelect.value;
-      if (name) launchFile(name);
+  async function loadIntoVfs() {
+    await ensureVfsServiceWorker();
+    const files = Object.entries(entries).map(([path, bytes]) => ({
+      path,
+      bytes,
+      mime: mimeType(path)
+    }));
+    vfsFiles = {};
+    for (const f of files) vfsFiles[f.path] = { bytes: f.bytes, type: f.mime };
+    navigator.serviceWorker.controller?.postMessage({ type: 'VFS_SET', payload: files });
+    return new Promise((resolve) => {
+      const onMsg = (e) => {
+        if (e.data && e.data.type === 'VFS_READY') {
+          navigator.serviceWorker.removeEventListener('message', onMsg);
+          resolve();
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', onMsg);
+      setTimeout(() => resolve(), 200);
     });
+  }
 
-    // Handle ZIP upload
-    zipInput.addEventListener('change', async () => {
-      const file = zipInput.files?.[0];
-      if (!file) return;
-      statusEl.textContent = `Reading ZIP: ${file.name}…`;
+  function wrapWithBase(htmlBytes, rootPath = '') {
+    const raw = new TextDecoder().decode(htmlBytes);
+    const baseTag = `<base href="/vfs/${rootPath}">`;
+    if (/<head[^>]*>/i.test(raw)) {
+      return raw.replace(/<head[^>]*>/i, m => m + baseTag);
+    }
+    if (/<html[^>]*>/i.test(raw)) {
+      return raw.replace(/<html[^>]*>/i, m => m + '<head>' + baseTag + '</head>');
+    }
+    return '<head>' + baseTag + '</head>' + raw;
+  }
 
-      const buf = new Uint8Array(await file.arrayBuffer());
-      progressBar.style.width = '5%';
+  function isUnityBuild() {
+    const names = Object.keys(entries).map(n => n.toLowerCase());
+    return names.some(n => n.includes('.wasm')) ||
+           names.some(n => n.includes('.unityweb')) ||
+           names.some(n => n.includes('unityloader.js'));
+  }
 
-      // Unzip
-      const unzipped = fflate.unzipSync(buf);
-      const names = Object.keys(unzipped);
-      const total = names.length;
-
-      entries = {};
-      blobMap = {};
-
-      // Process each file with progress updates
-      names.forEach((name, idx) => {
-        const bytes = unzipped[name];
-        entries[name] = bytes;
-        blobMap[name] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
-
-        // Update progress bar and status
-        const percent = Math.round(((idx + 1) / total) * 80) + 10; // 10–90% range
-        progressBar.style.width = percent + '%';
-        statusEl.textContent = `Extracting ${idx + 1}/${total}: ${name}`;
-      });
-
-      // Populate selection
-      fileSelect.innerHTML = '';
-      names.forEach(n => {
-        const opt = document.createElement('option');
-        opt.value = n;
-        opt.textContent = n;
-        fileSelect.appendChild(opt);
-      });
-
-      // Auto-select entry point
-      const entry = names.find(n => /index\.html?$/i.test(n)) ||
-                    names.find(n => /\.html?$/i.test(n)) ||
-                    names[0];
-
-      if (entry) {
-        fileSelect.value = entry;
-        await launchFile(entry);
-        progressBar.style.width = '100%';
-        statusEl.textContent = `Finished extraction (${total} files). Running: ${entry}`;
-        setTimeout(() => progressBar.style.width = '0%', 1500);
-      } else {
-        statusEl.textContent = 'No HTML entry point found in ZIP.';
-        progressBar.style.width = '0%';
-      }
-    });
-
-    // Handle single HTML upload (outside ZIP)
-    htmlInput.addEventListener('change', async () => {
-      const file = htmlInput.files?.[0];
-      if (!file) return;
-      statusEl.textContent = `Loading ${file.name}…`;
-
-      // Single-file path: use src (not srcdoc) to better mimic local file
-      const raw = await file.text();
-      const blob = new Blob([raw], { type: 'text/html' });
+  async function launchFile(name) {
+    if (!entries[name]) return;
+    const unity = isUnityBuild();
+    if (unity) {
+      await loadIntoVfs();
+      const rootPath = name.includes('/') ? name.substring(0, name.lastIndexOf('/') + 1) : '';
+      const wrapped = wrapWithBase(entries[name], rootPath);
+      const blob = new Blob([wrapped], { type: 'text/html' });
       stage.src = URL.createObjectURL(blob);
-      statusEl.textContent = `Running: ${file.name}`;
+      statusEl.textContent = `Running Unity: ${name}`;
+    } else {
+      const raw = new TextDecoder().decode(entries[name]);
+      stage.srcdoc = raw;
+      statusEl.textContent = `Running: ${name}`;
+    }
+  }
 
-      fileSelect.innerHTML = '';
+  fileSelect.addEventListener('change', () => {
+    const name = fileSelect.value;
+    if (name) launchFile(name);
+  });
+
+  zipInput.addEventListener('change', async () => {
+    const file = zipInput.files?.[0];
+    if (!file) return;
+    statusEl.textContent = `Reading ZIP: ${file.name}…`;
+    const buf = new Uint8Array(await file.arrayBuffer());
+    progressBar.style.width = '5%';
+    const unzipped = fflate.unzipSync(buf);
+    const names = Object.keys(unzipped);
+    const total = names.length;
+    entries = {};
+    blobMap = {};
+    names.forEach((name, idx) => {
+      const bytes = unzipped[name];
+      entries[name] = bytes;
+      blobMap[name] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
+      const percent = Math.round(((idx + 1) / total) * 80) + 10;
+      progressBar.style.width = percent + '%';
+      const sizeKB = (bytes.length / 1024).toFixed(1);
+      statusEl.textContent = `Extracting ${idx + 1}/${total}: ${name} (${sizeKB} KB)`;
+    });
+    fileSelect.innerHTML = '';
+    names.forEach(n => {
       const opt = document.createElement('option');
-      opt.value = file.name;
-      opt.textContent = file.name;
+      opt.value = n;
+      opt.textContent = n;
       fileSelect.appendChild(opt);
-      fileSelect.value = file.name;
     });
+    const entry = names.find(n => /index\.html?$/i.test(n)) ||
+                  names.find(n => /\.html?$/i.test(n)) ||
+                  names[0];
+    if (entry) {
+      fileSelect.value = entry;
+      await launchFile(entry);
+      progressBar.style.width = '100%';
+      statusEl.textContent = `Finished extraction (${total} files). Running: ${entry}`;
+      setTimeout(() => progressBar.style.width = '0%', 1500);
+    } else {
+      statusEl.textContent = 'No HTML entry point found in ZIP.';
+      progressBar.style.width = '0%';
+    }
+  });
 
-    // Fullscreen toggle
-    fullscreenBtn.addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        stage.requestFullscreen();
-      } else {
-        document.exitFullscreen();
-      }
-    });
+  htmlInput.addEventListener('change', async () => {
+    const file = htmlInput.files?.[0];
+    if (!file) return;
+    statusEl.textContent = `Loading ${file.name}…`;
+
+    // Single-file path: use src (not srcdoc) to better mimic local file
+    const raw = await file.text();
+    const blob = new Blob([raw], { type: 'text/html' });
+    stage.src = URL.createObjectURL(blob);
+    statusEl.textContent = `Running: ${file.name}`;
+
+    fileSelect.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = file.name;
+    opt.textContent = file.name;
+    fileSelect.appendChild(opt);
+    fileSelect.value = file.name;
+  });
   </script>
 </body>
 </html>
