@@ -1,0 +1,32 @@
+<script>
+// Make sure the game container can receive focus
+document.body.setAttribute("tabindex", "0");
+document.body.focus();
+
+// Capture key presses globally
+window.addEventListener("keydown", function(e) {
+  // Prevent Google Sites from scrolling with arrow keys
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) {
+    e.preventDefault();
+  }
+
+  // Handle game controls
+  switch(e.key) {
+    case "ArrowLeft":
+      moveLeft(); // your game function
+      break;
+    case "ArrowRight":
+      moveRight();
+      break;
+    case "ArrowUp":
+      rotatePiece();
+      break;
+    case "ArrowDown":
+      dropPiece();
+      break;
+    case " ":
+      hardDrop();
+      break;
+  }
+});
+</script>
