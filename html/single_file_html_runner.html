@@ -138,7 +138,7 @@
   }
 
   // Patch HTML to replace resource paths with blob URLs
-  function patchUnityHtml(name) {
+  function patchHtmlWithBlobs(name) {
     let raw = new TextDecoder().decode(entries[name]);
 
     // Rewrite file:// references
@@ -153,30 +153,25 @@
       }
     });
 
-    // Replace plain relative filenames with blob URLs
-    for (const [fname, blobUrl] of Object.entries(blobMap)) {
-      const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const re = new RegExp(safe, 'g');
-      if (re.test(raw)) {
-        console.log('Patching reference:', fname, '→', blobUrl);
-        raw = raw.replace(re, blobUrl);
+    // Rewrite src/href/poster attributes
+    raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/g, (match, attr, path) => {
+      const clean = path.replace(/^\/+/, '');
+      if (blobMap[clean]) {
+        console.log(`Rewriting ${attr}:`, path, '→', blobMap[clean]);
+        return `${attr}="${blobMap[clean]}"`;
       }
-    }
+      return match;
+    });
+
     return raw;
   }
 
   async function launchFile(name) {
     if (!entries[name]) return;
-    if (isUnityBuild()) {
-      const patched = patchUnityHtml(name);
-      const blob = new Blob([patched], { type: 'text/html' });
-      stage.src = URL.createObjectURL(blob);
-      statusEl.textContent = `Running Unity: ${name}`;
-    } else {
-      const raw = new TextDecoder().decode(entries[name]);
-      stage.srcdoc = raw;
-      statusEl.textContent = `Running: ${name}`;
-    }
+    const patched = patchHtmlWithBlobs(name);
+    const blob = new Blob([patched], { type: 'text/html' });
+    stage.src = URL.createObjectURL(blob);
+    statusEl.textContent = `Running: ${name}`;
   }
 
   fileSelect.addEventListener('change', () => {
