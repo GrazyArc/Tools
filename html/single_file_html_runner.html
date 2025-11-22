@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <title>ZIP/HTML Runner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
@@ -130,14 +130,7 @@
     return 'application/octet-stream';
   }
 
-  function isUnityBuild() {
-    const names = Object.keys(entries).map(n => n.toLowerCase());
-    return names.some(n => n.includes('.wasm')) ||
-           names.some(n => n.includes('.unityweb')) ||
-           names.some(n => n.includes('unityloader.js'));
-  }
-
-  // Patch HTML to replace resource paths with blob URLs
+  // Patch HTML/JS to replace resource paths with blob URLs
   function patchHtmlWithBlobs(name) {
     let raw = new TextDecoder().decode(entries[name]);
 
@@ -147,10 +140,9 @@
       if (blobMap[clean]) {
         console.log('Rewriting file:// reference:', match, '→', blobMap[clean]);
         return blobMap[clean];
-      } else {
-        console.warn('Unresolved file:// reference:', match);
-        return match;
       }
+      console.warn('Unresolved file:// reference:', path);
+      return match;
     });
 
     // Rewrite src/href/poster attributes
@@ -160,8 +152,19 @@
         console.log(`Rewriting ${attr}:`, path, '→', blobMap[clean]);
         return `${attr}="${blobMap[clean]}"`;
       }
+      console.warn(`Unresolved ${attr}:`, path);
       return match;
     });
+
+    // Rewrite quoted string literals inside JS/HTML that match filenames
+    for (const [fname, blobUrl] of Object.entries(blobMap)) {
+      const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const re = new RegExp(`["']${safe}["']`, 'g');
+      if (re.test(raw)) {
+        console.log('Rewriting string literal:', fname, '→', blobUrl);
+        raw = raw.replace(re, `"${blobUrl}"`);
+      }
+    }
 
     return raw;
   }
@@ -197,7 +200,11 @@
       try {
         const bytes = unzipped[name];
         entries[name] = bytes;
-        blobMap[name] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
+
+        // normalize: strip leading folder (e.g. "twitch-tetris/")
+        const shortName = name.replace(/^[^/]+\//, '');
+
+        blobMap[shortName] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
         const percent = Math.round(((idx + 1) / total) * 80) + 10;
         progressBar.style.width = percent + '%';
         const sizeKB = (bytes.length / 1024).toFixed(1);
@@ -207,6 +214,8 @@
         statusEl.textContent = `Error extracting ${name}`;
       }
     }
+
+    console.log('blobMap keys (normalized):', Object.keys(blobMap));
 
     fileSelect.innerHTML = '';
     names.forEach(n => {
@@ -273,10 +282,30 @@
     }
   });
 
+    // Ensure the iframe grabs focus when loaded
+  stage.setAttribute("tabindex", "0"); // make iframe focusable
+  stage.addEventListener("load", () => {
+    stage.focus();
+    console.log("Stage iframe focused for keyboard input");
+  });
+
+  // Forward key events from parent to iframe if needed
+  window.addEventListener("keydown", (e) => {
+    // prevent Google Sites from scrolling with arrow keys
+    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+      e.preventDefault();
+    }
+    // send the event into the iframe
+    if (stage.contentWindow) {
+      stage.contentWindow.dispatchEvent(new KeyboardEvent("keydown", e));
+    }
+  });
+
   // Auto-hide header bar
   setTimeout(() => {
     header.classList.add('hidden');
   }, 2000);
+
   document.addEventListener('mousemove', (e) => {
     if (e.clientY < 50) {
       header.classList.remove('hidden');
@@ -286,9 +315,11 @@
       }
     }
   });
+
   header.addEventListener('mouseenter', () => {
     header.classList.remove('hidden');
   });
+
   header.addEventListener('mouseleave', () => {
     header.classList.add('hidden');
   });
