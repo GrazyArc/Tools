@@ -99,6 +99,7 @@
   <div id="progressContainer"><div id="progressBar"></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
 <script>
   const statusEl = document.getElementById('status');
   const stage = document.getElementById('stage');
@@ -107,11 +108,12 @@
   const fileSelect = document.getElementById('fileSelect');
   const fullscreenBtn = document.getElementById('fullscreenBtn');
   const progressBar = document.getElementById('progressBar');
+  const header = document.querySelector('header');
 
-  let entries = {};      // name -> Uint8Array
-  let blobMap = {};      // name -> Blob URL (for fallback)
-  let vfsReady = false;  // service worker ready state
-  let vfsFiles = {};     // name -> { bytes, type }
+  let entries = {};
+  let blobMap = {};
+  let vfsReady = false;
+  let vfsFiles = {};
 
   // --- Service Worker (in-page) ---
   async function ensureVfsServiceWorker() {
@@ -284,19 +286,70 @@
     const file = htmlInput.files?.[0];
     if (!file) return;
     statusEl.textContent = `Loading ${file.name}…`;
-
-    // Single-file path: use src (not srcdoc) to better mimic local file
     const raw = await file.text();
     const blob = new Blob([raw], { type: 'text/html' });
     stage.src = URL.createObjectURL(blob);
     statusEl.textContent = `Running: ${file.name}`;
-
     fileSelect.innerHTML = '';
     const opt = document.createElement('option');
     opt.value = file.name;
     opt.textContent = file.name;
     fileSelect.appendChild(opt);
     fileSelect.value = file.name;
+  });
+
+  // Fullscreen toggle
+  fullscreenBtn.addEventListener('click', () => {
+    const elem = stage; // your iframe element
+
+    if (!document.fullscreenElement &&
+        !document.webkitFullscreenElement &&
+        !document.msFullscreenElement) {
+      // Try standard API
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) { // Safari
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) { // IE/Edge legacy
+        elem.msRequestFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        // Fallback: request fullscreen on the whole page
+        document.documentElement.requestFullscreen();
+      }
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+    }
+  });
+    // --- Auto-hide header bar ---
+  // Hide header after a short delay
+  setTimeout(() => {
+    header.classList.add('hidden');
+  }, 2000);
+
+  // Show header when mouse is near top
+  document.addEventListener('mousemove', (e) => {
+    if (e.clientY < 50) {
+      header.classList.remove('hidden');
+    } else {
+      if (!header.matches(':hover')) {
+        header.classList.add('hidden');
+      }
+    }
+  });
+
+  // Keep header visible while hovering
+  header.addEventListener('mouseenter', () => {
+    header.classList.remove('hidden');
+  });
+  header.addEventListener('mouseleave', () => {
+    header.classList.add('hidden');
   });
   </script>
 </body>
