@@ -80,6 +80,7 @@
     }
   </style>
 </head>
+<body>
   <header>
     <label class="btn">
       <strong>Select ZIP</strong>
@@ -101,8 +102,8 @@
   <button id="fullscreenBtn">⛶</button>
   <div id="progressContainer"><div id="progressBar"></div></div>
 
-<script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
-<script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
+  <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
 <script>
   const statusEl = document.getElementById('status');
   const stage = document.getElementById('stage');
@@ -115,7 +116,8 @@
 
   let entries = {};
   let blobMap = {};
-
+</script>
+<script>
   function mimeType(name) {
     const lower = name.toLowerCase();
     if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html';
@@ -135,32 +137,35 @@
     return 'application/octet-stream';
   }
 
+  // Resolve a path to a blob URL using filename-only or full path
+  function resolveBlobUrl(path) {
+    if (!path) return null;
+    const clean = String(path).replace(/^["']|["']$/g, '').replace(/^\.?\/+/, '');
+    const base = clean.split(/[?#]/)[0];
+    const fileNameOnly = base.split('/').pop();
+    return blobMap[fileNameOnly] || blobMap[base] || null;
+  }
+
   function patchHtmlWithBlobs(name) {
     let raw = new TextDecoder().decode(entries[name]);
-    raw = raw.replace(/file:\/\/\/?([^\s"'>]+)/g, (match, path) => {
-      const clean = path.replace(/^\/+/, '');
-      if (blobMap[clean]) return blobMap[clean];
-      return match;
-    });
-    raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/g, (match, attr, path) => {
-      const clean = path.replace(/^\/+/, '');
+    raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/gi, (match, attr, path) => {
       if (/^(https?:)?\/\//i.test(path)) return match;
-      if (blobMap[clean]) return `${attr}="${blobMap[clean]}"`;
-      return match;
+      const blobUrl = resolveBlobUrl(path);
+      return blobUrl ? `${attr}="${blobUrl}"` : match;
     });
     for (const [fname, blobUrl] of Object.entries(blobMap)) {
       const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const re = new RegExp(`["']${safe}["']`, 'g');
-      raw = raw.replace(re, `"${blobUrl}"`);
+      raw = raw.replace(new RegExp(`(["'])${safe}\\1`, 'g'), `"${blobUrl}"`);
     }
     return raw;
   }
-
+</script>
+<script>
   async function launchFile(name) {
     if (!entries[name]) return;
-    const shortName = name.replace(/^[^/]+\//, '');
-    if (shortName.toLowerCase().endsWith('.swf')) {
-      const blobUrl = blobMap[shortName];
+    const fileNameOnly = name.split('/').pop();
+    if (fileNameOnly.toLowerCase().endsWith('.swf')) {
+      const blobUrl = blobMap[fileNameOnly];
       const container = document.createElement('div');
       container.style.width = "100%";
       container.style.height = "80vh";
@@ -177,12 +182,14 @@
     stage.src = URL.createObjectURL(blob);
     statusEl.textContent = `Running: ${name}`;
   }
-
+</script>
+<script>
   fileSelect.addEventListener('change', () => {
     const name = fileSelect.value;
     if (name) launchFile(name);
   });
-
+</script>
+<script>
   zipInput.addEventListener('change', async () => {
     const file = zipInput.files?.[0];
     if (!file) return;
@@ -197,11 +204,14 @@
     blobMap = {};
 
     for (let idx = 0; idx < names.length; idx++) {
-      const name = names[idx];
-      const bytes = unzipped[name];
-      entries[name] = bytes;
-      const shortName = name.replace(/^[^/]+\//, '');
-      blobMap[shortName] = URL.createObjectURL(new Blob([bytes], { type: mimeType(name) }));
+      const path = names[idx];
+      const bytes = unzipped[path];
+      entries[path] = bytes;
+      const fileNameOnly = path.split('/').pop();
+      const blob = new Blob([bytes], { type: mimeType(path) });
+      const url = URL.createObjectURL(blob);
+      blobMap[fileNameOnly] = url;
+      blobMap[path] = url;
       const percent = Math.round(((idx + 1) / total) * 80) + 10;
       progressBar.style.width = percent + '%';
     }
@@ -227,7 +237,8 @@
       progressBar.style.width = '0%';
     }
   });
-
+</script>
+<script>
   htmlInput.addEventListener('change', async () => {
     const file = htmlInput.files?.[0];
     if (!file) return;
@@ -243,58 +254,75 @@
     fileSelect.appendChild(opt);
     fileSelect.value = file.name;
   });
-
+</script>
+<script>
   swfInput.addEventListener('change', async () => {
     const file = swfInput.files?.[0];
     if (!file) return;
     statusEl.textContent = `Loading SWF: ${file.name}…`;
     const blobUrl = URL.createObjectURL(file);
-
     const container = document.createElement('div');
     container.id = "swfStage";
     container.style.width = "100%";
     container.style.height = stage.style.height || "80vh";
     container.style.display = "block";
-
     const ruffle = window.RufflePlayer.newest();
     const player = ruffle.createPlayer();
     player.style.width = "100%";
     player.style.height = "100%";
-
     container.appendChild(player);
     stage.replaceWith(container);
-
     player.load(blobUrl);
     statusEl.textContent = `Running SWF: ${file.name}`;
   });
-
+</script>
+<script>
   fullscreenBtn.addEventListener('click', () => {
     const swfStage = document.getElementById('swfStage');
     const elem = swfStage || stage;
     if (!document.fullscreenElement) {
-      if (elem.requestFullscreen) {
-        elem.requestFullscreen();
-      } else if (elem.webkitRequestFullscreen) {
-        elem.webkitRequestFullscreen();
-      } else if (elem.msRequestFullscreen) {
-        elem.msRequestFullscreen();
-      }
+      if (elem.requestFullscreen) elem.requestFullscreen();
+      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+      else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
-      } else if (document.msExitFullscreen) {
-        document.msExitFullscreen();
-      }
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
     }
   });
-
+</script>
+<script>
   stage.setAttribute("tabindex", "0");
   stage.addEventListener("load", () => {
     stage.focus();
+    const w = stage.contentWindow;
+    // Storage shim to avoid NS_ERROR_FAILURE
+    try {
+      const t = "__runner_storage_test__";
+      w.localStorage.setItem(t, "1");
+      w.localStorage.removeItem(t);
+    } catch (_) {
+      const mem = new Map();
+      w.localStorage = {
+        getItem(k){ return mem.has(k) ? mem.get(k) : null; },
+        setItem(k,v){ mem.set(String(k), String(v)); },
+        removeItem(k){ mem.delete(k); },
+        clear() {
+          mem.clear();
+        },
+        key(i) {
+          return Array.from(mem.keys())[i] ?? null;
+        },
+        get length() {
+          return mem.size;
+        }
+      };
+      // Provide sessionStorage shim too if needed
+      w.sessionStorage = w.sessionStorage ?? w.localStorage;
+    }
   });
-
+</script>
+<script>
   window.addEventListener("keydown", (e) => {
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
       e.preventDefault();
@@ -315,38 +343,6 @@
       stage.contentWindow.dispatchEvent(forwarded);
     }
   });
-
-  // --- Patch fetch to redirect src/* requests to blob URLs ---
-  const origFetch = window.fetch;
-  window.fetch = async function(resource, options) {
-    const resStr = (typeof resource === "string") ? resource : resource.url;
-    const clean = resStr.replace(/^\.?\//, "");
-
-    if (window.runnerDebug) {
-      window.runnerDebug.group("Fetch");
-      window.runnerDebug.log("Requested:", resStr);
-      window.runnerDebug.log("Normalized:", clean);
-    }
-
-    if (blobMap[resStr]) {
-      if (window.runnerDebug) window.runnerDebug.log("Redirecting exact match:", blobMap[resStr]);
-      if (window.runnerDebug) window.runnerDebug.groupEnd();
-      return origFetch(blobMap[resStr], options);
-    }
-
-    if (blobMap[clean]) {
-      if (window.runnerDebug) window.runnerDebug.log("Redirecting cleaned match:", blobMap[clean]);
-      if (window.runnerDebug) window.runnerDebug.groupEnd();
-      return origFetch(blobMap[clean], options);
-    }
-
-    if (window.runnerDebug) {
-      window.runnerDebug.warn("No blobMap entry found for:", resStr);
-      window.runnerDebug.groupEnd();
-    }
-    return origFetch(resource, options);
-  };
 </script>
-<script src="debug.js"></script> <!-- comment out for debug toggle-->
 </body>
 </html>
