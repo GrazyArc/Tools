@@ -8,11 +8,10 @@
     :root { color-scheme: dark; }
     body {
       margin: 0;
-      padding: 0; /* Ensures the body fits the window */
+      padding: 0;
       font-family: system-ui, sans-serif;
       background: #121212;
       color: #eee;
-      /* Prevent accidental scrolling outside of the game area */
       overflow: hidden; 
     }
     header {
@@ -24,7 +23,7 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.6);
       border-radius: 0 0 12px 12px;
       z-index: 10;
-      height: 46px; /* Fixed height for header content */
+      height: 46px; 
     }
     label.btn {
       background: #2a2a2a;
@@ -48,38 +47,34 @@
     }
     #status { flex: 1; font-size: 14px; opacity: 0.8; }
     
-    /* NEW: Container to manage the full height below the header */
     #stageContainer {
       padding: 12px;
-      height: calc(100vh - 46px - 24px); /* 46px (header) + 24px (top/bottom padding) */
+      height: calc(100vh - 46px - 24px); 
       box-sizing: border-box;
     }
 
     .stage-element {
       width: 100%;
-      height: 100%; /* Fill the container */
-      border: 3px solid #333; /* Default border */
+      height: 100%; 
+      border: 3px solid #333; 
       border-radius: 12px;
       box-shadow: 0 0 12px rgba(0,0,0,0.7);
       transition: border-color 0.2s, box-shadow 0.2s;
     }
     
-    /* NEW: Visual cue when the element has focus */
     .stage-element.focused {
-      border-color: #4caf50; /* Green border when focused */
+      border-color: #4caf50; 
       box-shadow: 0 0 20px rgba(76, 175, 80, 0.7);
     }
     
-    /* NEW: Visual cue when the element loses focus */
     .stage-element.blurry {
-      border-color: #f44336; /* Red border when unfocused */
+      border-color: #f44336; 
       box-shadow: 0 0 20px rgba(244, 67, 54, 0.7);
     }
     
-    #fullscreenBtn {
+    .control-btn {
       position: fixed;
       top: 12px;
-      right: 12px;
       background: #2a2a2a;
       color: #eee;
       border: none;
@@ -88,28 +83,21 @@
       height: 40px;
       cursor: pointer;
       box-shadow: 0 2px 6px rgba(0,0,0,0.6);
-      opacity: 0.3;
-      transition: opacity 0.3s;
+      opacity: 0.5;
+      transition: opacity 0.3s, transform 0.1s;
       z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
     }
-    /* Style for Lock Cursor Button */
-    #lockCursorBtn {
-      position: fixed;
-      top: 12px;
-      right: 60px;
-      background: #2a2a2a;
-      color: #eee;
-      border: none;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      cursor: pointer;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.6);
-      opacity: 0.3;
-      transition: opacity 0.3s;
-      z-index: 1000;
-    }
-    #fullscreenBtn:hover, #lockCursorBtn:hover { opacity: 1; }
+    .control-btn:hover { opacity: 1; transform: scale(1.05); }
+    .control-btn:active { transform: scale(0.95); }
+
+    #fullscreenBtn { right: 12px; }
+    #lockCursorBtn { right: 60px; }
+    #popoutBtn { right: 108px; background: #3f51b5; }
+
     #progressContainer {
       position: fixed;
       bottom: 0;
@@ -126,36 +114,57 @@
       transition: width 0.2s;
     }
 
-    /* --- Debug Console Styles --- */
     #debugConsole {
         position: fixed;
         bottom: 0;
         right: 0;
         width: 400px;
-        max-height: 50vh;
-        background: rgba(0, 0, 0, 0.85);
+        max-height: 50vh; 
+        background: rgba(0, 0, 0, 0.9);
         border: 1px solid #333;
         border-radius: 8px 0 0 0;
-        overflow-y: auto;
         font-family: monospace;
         font-size: 10px;
         color: #ddd;
         padding: 8px;
         z-index: 20;
         box-shadow: -4px -4px 10px rgba(0, 0, 0, 0.5);
-        transition: transform 0.3s ease-in-out;
-        transform: translateY(0);
+        transition: max-height 0.3s ease-in-out;
+        overflow-y: auto; 
     }
-    #debugConsole.hidden {
-        transform: translateY(100%);
+    
+    #debugConsole.minimized {
+        max-height: 40px; 
+        overflow-y: hidden; 
     }
+    
     #debugConsole h4 {
-        margin: 0 0 5px 0;
+        margin: 0;
         padding-bottom: 5px;
         border-bottom: 1px dashed #333;
         cursor: pointer;
         color: #4caf50;
+        display: flex; 
+        justify-content: space-between;
+        align-items: center;
+        user-select: none;
     }
+
+    #debugConsole.minimized h4 {
+        border-bottom: none; 
+    }
+
+    #debugConsole.minimized #logContent {
+        display: none;
+    }
+
+    #toggleArrow {
+        font-size: 14px;
+        line-height: 1;
+        margin-left: 10px;
+        transition: transform 0.3s;
+    }
+    
     .log-item {
         padding: 2px 0;
         border-bottom: 1px dotted #222;
@@ -195,13 +204,16 @@
     </iframe>
   </div>
   
-  <button id="lockCursorBtn" title="Click to lock cursor (for FPS games)">🔒</button>
-  <button id="fullscreenBtn">⛶</button>
+  <button id="popoutBtn" class="control-btn" title="Open in New Tab">↗</button>
+  <button id="lockCursorBtn" class="control-btn" title="Lock Cursor">🔒</button>
+  <button id="fullscreenBtn" class="control-btn">⛶</button>
   <div id="progressContainer"><div id="progressBar"></div></div>
 
-  <!-- Debug Console UI -->
-  <div id="debugConsole">
-      <h4 id="debugToggle">Runner Debug Log (Click to Hide)</h4>
+  <div id="debugConsole" class="minimized">
+      <h4 id="debugToggle">
+          Runner Debug Log
+          <span id="toggleArrow" aria-label="Expand">&#x25B2;</span> 
+      </h4>
       <div id="logContent"></div>
   </div>
 
@@ -211,7 +223,6 @@
 <script>
   const statusEl = document.getElementById('status');
   const stage = document.getElementById('stage');
-  const stageContainer = document.getElementById('stageContainer');
   let currentStageElement = stage;
   const zipInput = document.getElementById('zip');
   const htmlInput = document.getElementById('htmlFile');
@@ -219,15 +230,17 @@
   const fileSelect = document.getElementById('fileSelect');
   const fullscreenBtn = document.getElementById('fullscreenBtn');
   const lockCursorBtn = document.getElementById('lockCursorBtn');
+  const popoutBtn = document.getElementById('popoutBtn');
   const progressBar = document.getElementById('progressBar');
   const debugConsole = document.getElementById('debugConsole');
   const logContent = document.getElementById('logContent');
+  const debugToggle = document.getElementById('debugToggle');
+  const toggleArrow = document.getElementById('toggleArrow');
 
   let entries = {};
   let blobMap = {};
   let mapKeys = [];
 
-  // Global logging function
   function log(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const formattedMessage = `[${timestamp}] ${message}`;
@@ -241,15 +254,28 @@
     logItem.textContent = formattedMessage;
     logContent.appendChild(logItem);
     
-    logContent.scrollTop = logContent.scrollHeight;
+    if (!debugConsole.classList.contains('minimized')) {
+        logContent.scrollTop = logContent.scrollHeight;
+    }
   }
 
-  // Toggle debug console visibility
-  document.getElementById('debugToggle').addEventListener('click', () => {
-    debugConsole.classList.toggle('hidden');
+  debugToggle.addEventListener('click', () => {
+    const isMinimized = debugConsole.classList.toggle('minimized');
+    if (isMinimized) {
+        toggleArrow.innerHTML = '&#x25B2;'; 
+        toggleArrow.setAttribute('aria-label', 'Expand');
+    } else {
+        toggleArrow.innerHTML = '&#x25BC;'; 
+        toggleArrow.setAttribute('aria-label', 'Minimize');
+        setTimeout(() => logContent.scrollTop = logContent.scrollHeight, 300);
+    }
   });
 
-  // Function to handle focus state and visual cue (Red/Green)
+  popoutBtn.addEventListener('click', () => {
+      window.open(window.location.href, '_blank');
+      log('Opened runner in a new tab.', 'info');
+  });
+
   function handleStageFocus(isFocused) {
       const targetElement = currentStageElement; 
       if (!targetElement) return;
@@ -257,50 +283,38 @@
       if (isFocused) {
           targetElement.classList.add('focused');
           targetElement.classList.remove('blurry');
-          log('Game Stage gained input focus (clicks/keys captured).', 'info');
+          log('Game Stage focused.', 'info');
       } else {
           targetElement.classList.remove('focused');
           targetElement.classList.add('blurry');
-          log('Game Stage lost input focus. Click on the game to continue.', 'warn');
       }
   }
 
-  // Set up focus/blur listeners on the stage element and its contents
   function setupFocusListeners() {
-      // Clean up previous listeners if they exist
       currentStageElement.removeEventListener('focus', () => handleStageFocus(true));
       currentStageElement.removeEventListener('blur', () => handleStageFocus(false));
-
-      // Add listeners to the main stage element (iframe or div)
       currentStageElement.addEventListener('focus', () => handleStageFocus(true));
       currentStageElement.addEventListener('blur', () => handleStageFocus(false));
       
-      // Crucial: For the iframe, we also need to detect focus on the inner document body
       if (currentStageElement === stage && stage.contentWindow) {
           try {
-             // Use capture phase (true) to catch events bubbling up from the inner document
              stage.contentWindow.addEventListener('focus', () => handleStageFocus(true), true);
              stage.contentWindow.addEventListener('blur', () => handleStageFocus(false), true);
           } catch (e) {
-             // Fails if contentWindow is cross-origin or restricted
              log(`Could not attach contentWindow focus listeners: ${e.message}`, 'error');
           }
       }
   }
 
-  // Utility function to reset the display to the original iframe
   function resetStageToIframe() {
-    // 1. Remove Ruffle container if it exists
     const swfStage = document.getElementById('swfStage');
     if (swfStage && swfStage.parentNode) {
       swfStage.replaceWith(stage);
       currentStageElement = stage;
       stage.classList.add('stage-element');
-      // Set the default unfocused state
       stage.classList.add('blurry'); 
       stage.classList.remove('focused');
     }
-    // 2. Setup listeners for the iframe
     setupFocusListeners();
   }
 </script>
@@ -323,75 +337,55 @@
     if (lower.endsWith('.swf')) return 'application/x-shockwave-flash';
     return 'application/octet-stream';
   }
-
-  // Path resolution function used by the injected shim inside the game iframe
-  window.runnerResolveBlobUrl = function(path) {
-    if (!path) {
-        log(`INTERNAL ERROR: runnerResolveBlobUrl called with null/empty path.`, 'error');
-        return null;
-    }
-    const pathString = String(path);
-    log(`ENGINE REQUEST: Looking for path "${pathString}"...`, 'info');
-    
-    const clean = pathString.replace(/^["']|["']$/g, '').replace(/^\.?\/+/, '').split(/[?#]/)[0];
-
-    const resolvedUrl = blobMap[clean] || null;
-
-    if (resolvedUrl) {
-        log(`RESOLVED (Exact File Match): "${pathString}" -> ${resolvedUrl.substring(0, 40)}...`, 'info');
-        return resolvedUrl;
-    }
-
-    const dirPrefix = clean + '/';
-    const isDirectoryPrefix = mapKeys.some(key => key.startsWith(dirPrefix));
-
-    if (isDirectoryPrefix) {
-        log(`RESOLVED (Directory Prefix): "${pathString}" is a folder prefix. Returning original path.`, 'info');
-        return pathString; 
-    }
-    
-    const knownUnityFolders = ['StreamingAssets', 'TemplateData', 'Build', 'Data'];
-    if (knownUnityFolders.includes(clean)) {
-         log(`FALLBACK RESOLVE (Known Folder): "${pathString}" is a common Unity folder, returning original path to allow engine lookup.`, 'warn');
-         return pathString;
-    }
-
-    log(`FAILED TO RESOLVE: No file or folder found for "${pathString}". This is likely the missing resource.`, 'error');
-    return pathString; 
+  
+  // Safe buffer to Base64 (Chunked to avoid stack overflow)
+  function bufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const len = bytes.byteLength;
+      const chunkSize = 0x8000; // 32KB
+      for (let i = 0; i < len; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunkSize, len)));
+      }
+      return window.btoa(binary);
   }
 
-  // Patches HTML content to use Blob URLs and inject the path shim
   function patchHtmlWithBlobs(name) {
     let raw = new TextDecoder().decode(entries[name]);
     let patchesApplied = 0;
     
+    // --- PATCH 1: Standard attribute replacement ---
     raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/gi, (match, attr, path) => {
       if (/^(https?:)?\/\//i.test(path)) return match;
-      const blobUrl = window.runnerResolveBlobUrl(path);
-      if (blobUrl && blobUrl.startsWith('blob:')) {
+      const clean = path.replace(/^["']|["']$/g, '').replace(/^\.?\/+/, '').split(/[?#]/)[0];
+      if (blobMap[clean]) {
           patchesApplied++;
-          return `${attr}="${blobUrl}"`;
+          return `${attr}="${blobMap[clean]}"`;
       }
       return match;
     });
 
+    // --- PATCH 2: Unity Config URL Replacement ---
     raw = raw.replace(/(\w+Url\s*:\s*["'])([^"']+)(["'])/g, (match, prefix, path, suffix) => {
-        const blobUrl = window.runnerResolveBlobUrl(path);
-        if (blobUrl && blobUrl.startsWith('blob:')) {
+        const clean = path.replace(/^["']|["']$/g, '').replace(/^\.?\/+/, '').split(/[?#]/)[0];
+        if (blobMap[clean]) {
             patchesApplied++;
-            return `${prefix}${blobUrl}${suffix}`;
+            return `${prefix}${blobMap[clean]}${suffix}`;
         }
         return match;
     });
 
+    // --- PATCH 3: Disable Web Workers ---
     raw = raw.replace(/(useWebWorkers\s*:\s*|webWorkerUrl\s*:\s*).+/g, (match) => {
         patchesApplied++;
-        log('PATCHED: Disabled Web Workers to force single-threaded mode.', 'warn');
-        return `useWebWorkers: false, // Patched by ZIP Runner to force single-threaded mode`;
+        return `useWebWorkers: false, // Patched by ZIP Runner`;
     });
     
+    // --- PATCH 4: Aggressive filename replacement ---
     for (const [fname, blobUrl] of Object.entries(blobMap)) {
-      if (!blobUrl || !blobUrl.startsWith('blob:')) continue; 
+      if (!blobUrl) continue;
+      // Skip very long data URIs in aggressive search to prevent lag
+      if (blobUrl.startsWith('data:') && blobUrl.length > 500) continue; 
       
       const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       raw = raw.replace(new RegExp(`(["'])${safe}\\1`, 'g'), (match, quote) => {
@@ -403,33 +397,56 @@
       });
     }
 
+    // --- PATCH 5: SELF-CONTAINED ENVIRONMENT SHIM ---
+    const blobMapJson = JSON.stringify(blobMap);
+    const mapKeysJson = JSON.stringify(mapKeys);
+
     const injectionScriptContent = 
         '<script>\n' +
-        '  // UNITY PATH RESOLUTION SHIM\n' +
-        '  if (typeof Module === \'undefined\') { var Module = {}; }\n' +
+        '  (function() {\n' +
+        '    console.log("Runner: Initializing environment shim...");\n' +
+        '    var blobMap = ' + blobMapJson + ';\n' +
+        '    var mapKeys = ' + mapKeysJson + ';\n' +
         '\n' +
-        '  Module.locateFile = function(path) {\n' +
-        '    try {\n' +
-        '        const resolvedUrl = window.parent.runnerResolveBlobUrl(path);\n' +
-        '        if (resolvedUrl) {\n' +
-        '            return resolvedUrl;\n' +
-        '        }\n' +
-        '    } catch (e) {\n' +
-        '        console.error(\'UNITY SHIM ERROR:\', e);\n' +
+        '    function resolve(path) {\n' +
+        '        if (!path) return null;\n' +
+        '        var clean = String(path).replace(/^["\']|["\']$/g, "").replace(/^\\.?\\/+/, "").split(/[?#]/)[0];\n' +
+        '        if (blobMap[clean]) return blobMap[clean];\n' +
+        '        var dir = clean + "/";\n' +
+        '        if (mapKeys.some(function(k) { return k.indexOf(dir) === 0; })) return path;\n' +
+        '        return path;\n' +
         '    }\n' +
-        '    return path; \n' +
-        '  };\n' +
-        '  \n' +
-        '  if (typeof UnityLoader === \'object\' && typeof UnityLoader.locateFile === \'function\') {\n' +
-        '      UnityLoader.locateFile = Module.locateFile;\n' +
-        '  }\n' +
-        '  \n' +
-        '  console.log(\'Runner: Module.locateFile shim injected successfully.\');\n' +
+        '\n' +
+        '    if (typeof Module === "undefined") window.Module = {};\n' +
+        '    Module.locateFile = function(path) { return resolve(path); };\n' +
+        '    if (typeof UnityLoader !== "undefined" && UnityLoader.locateFile) {\n' +
+        '        UnityLoader.locateFile = Module.locateFile;\n' +
+        '    }\n' +
+        '\n' +
+        '    try {\n' +
+        '       var noop = function() {};\n' +
+        '       window.history.pushState = noop;\n' +
+        '       window.history.replaceState = noop;\n' +
+        '    } catch(e) { console.warn("Could not patch History API", e); }\n' +
+        '\n' +
+        '    try {\n' +
+        '       window.Worker = function() {\n' +
+        '          console.warn("Web Workers disabled by Runner.");\n' +
+        '          return { postMessage: function() {}, terminate: function() {}, addEventListener: function() {} };\n' +
+        '       };\n' +
+        '    } catch(e) {}\n' +
+        '  })();\n' +
         '<\/script>\n';
 
-    raw = raw.replace(/<\/body>/i, injectionScriptContent + '</body>');
+    if (raw.includes('<head>')) {
+        raw = raw.replace('<head>', '<head>' + injectionScriptContent);
+    } else if (raw.includes('<body>')) {
+        raw = raw.replace('<body>', '<body>' + injectionScriptContent);
+    } else {
+        raw = injectionScriptContent + raw;
+    }
 
-    log(`HTML Patching Complete. Total patches applied: ${patchesApplied}. Unity LocateFile Shim injected.`);
+    log(`HTML Patching Complete. Patches applied: ${patchesApplied}.`, 'info');
     return raw;
   }
 </script>
@@ -498,7 +515,7 @@
         const total = names.length;
         entries = {};
         blobMap = {};
-        log(`ZIP contains ${total} files. Starting aggressive path mapping.`, 'info');
+        log(`ZIP contains ${total} files. Processing...`, 'info');
 
         for (let idx = 0; idx < names.length; idx++) {
           const path = names[idx];
@@ -508,11 +525,24 @@
 
           entries[path] = bytes;
           
-          const blob = new Blob([bytes], { type: mimeType(path) });
-          const url = URL.createObjectURL(blob);
+          // --- KEY CHANGE: Use Data URIs for Scripts and CSS to prevent "Access Denied" ---
+          let url;
+          const mime = mimeType(path);
+          const isScript = mime === 'application/javascript' || mime === 'text/css';
+          
+          // Use Data URI for scripts/css if file is smaller than 10MB to avoid stack overflow
+          // This fixes the "Access to blob... denied" error by embedding the code directly.
+          if (isScript && bytes.byteLength < 10 * 1024 * 1024) {
+             const base64 = bufferToBase64(bytes);
+             url = `data:${mime};base64,${base64}`;
+          } else {
+             const blob = new Blob([bytes], { type: mime });
+             url = URL.createObjectURL(blob);
+          }
           
           blobMap[path] = url;
           
+          // Aggressive path mapping
           const parts = path.split('/');
           for (let i = 0; i < parts.length - 1; i++) { 
             const subPath = parts.slice(i + 1).join('/');
@@ -524,7 +554,7 @@
           const percent = Math.round(((idx + 1) / total) * 80) + 10;
           progressBar.style.width = percent + '%';
         }
-        log('File data loaded into memory and aggressive blob map created.', 'info');
+        log('File data loaded. Scripts converted to Data URIs.', 'info');
 
         fileSelect.innerHTML = '';
         const runnableNames = names.filter(n => /\.html?$/i.test(n) || /\.swf$/i.test(n));
@@ -542,7 +572,7 @@
           progressBar.style.width = '100%';
           setTimeout(() => progressBar.style.width = '0%', 1500);
         } else {
-          statusEl.textContent = 'No HTML or SWF entry point found in ZIP.';
+          statusEl.textContent = 'No entry point found.';
           log('No runnable entry point found.', 'error');
           progressBar.style.width = '0%';
         }
@@ -557,28 +587,16 @@
   htmlInput.addEventListener('change', async () => {
     const file = htmlInput.files?.[0];
     if (!file) return;
-    
     resetStageToIframe();
     logContent.innerHTML = '';
-    
-    statusEl.textContent = `Loading ${file.name}…`;
-    log(`Loading single HTML file: ${file.name}`);
     
     try {
         const raw = await file.text();
         const blob = new Blob([raw], { type: 'text/html' });
         stage.src = URL.createObjectURL(blob);
         statusEl.textContent = `Running: ${file.name}`;
-        log(`Single HTML file loaded directly. Blob mapping skipped.`, 'warn');
-        
-        fileSelect.innerHTML = '';
-        const opt = document.createElement('option');
-        opt.value = file.name;
-        opt.textContent = file.name;
-        fileSelect.appendChild(opt);
-        fileSelect.value = file.name;
     } catch (e) {
-        log(`Error loading single HTML file: ${e.message}`, 'error');
+        log(`Error loading HTML file: ${e.message}`, 'error');
     }
   });
 </script>
@@ -586,13 +604,10 @@
   swfInput.addEventListener('change', async () => {
     const file = swfInput.files?.[0];
     if (!file) return;
-    
-    statusEl.textContent = `Loading SWF: ${file.name}…`;
-    log(`Loading single SWF file: ${file.name}`);
+    statusEl.textContent = `Loading SWF...`;
     
     try {
         const blobUrl = URL.createObjectURL(file);
-        
         const container = document.createElement('div');
         container.id = "swfStage";
         container.className = "stage-element blurry";
@@ -606,12 +621,10 @@
         player.style.width = "100%";
         player.style.height = "100%";
         container.appendChild(player);
-        
         player.load(blobUrl);
         statusEl.textContent = `Running SWF: ${file.name}`;
-        log(`SWF content loaded into Ruffle.`, 'info');
     } catch (e) {
-        log(`Error loading single SWF file: ${e.message}`, 'error');
+        log(`Error loading SWF: ${e.message}`, 'error');
     }
   });
 </script>
@@ -623,148 +636,67 @@
         if (elem.requestFullscreen) elem.requestFullscreen();
         else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
         else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
-        else {
-          log('Fullscreen API not supported by this browser.', 'error');
-        }
       } catch (e) {
-        log(`Fullscreen request failed (Permission Denied). Error: ${e.message}`, 'error');
+        log(`Fullscreen failed: ${e.message}`, 'error');
       }
     } else {
       if (document.exitFullscreen) document.exitFullscreen();
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-      else if (document.msExitFullscreen) document.msExitFullscreen();
     }
   });
 
   function updatePointerLockBtn() {
     if (document.pointerLockElement) {
       lockCursorBtn.textContent = '🔓';
-      lockCursorBtn.title = 'Click to release cursor lock';
+      lockCursorBtn.title = 'Release Cursor';
     } else {
       lockCursorBtn.textContent = '🔒';
-      lockCursorBtn.title = 'Click to lock cursor (for FPS games)';
+      lockCursorBtn.title = 'Lock Cursor';
     }
   }
 
-  document.addEventListener('pointerlockchange', () => {
-    if (document.pointerLockElement) {
-      log('Pointer Lock ACHIEVED successfully.', 'info');
-    } else {
-      log('Pointer Lock RELEASED (by user or system).', 'info');
-    }
-    updatePointerLockBtn();
-  });
-
+  document.addEventListener('pointerlockchange', updatePointerLockBtn);
   document.addEventListener('pointerlockerror', (e) => {
-    log('Pointer Lock FAILED. This is likely due to parent iframe restrictions.', 'error');
+    log('Pointer Lock failed. Try the "Pop-out" button.', 'error');
     updatePointerLockBtn();
   });
 
   lockCursorBtn.addEventListener('click', () => {
     if (document.pointerLockElement) {
       document.exitPointerLock();
-      return;
-    }
-    
-    const elem = currentStageElement;
-    let target = elem;
-    if (elem === stage && stage.contentWindow && stage.contentWindow.document.body) {
-        target = stage.contentWindow.document.body;
-    }
-
-    if (target.requestPointerLock) {
-      try {
-        target.requestPointerLock();
-        log(`Attempting to lock pointer to target: ${target.tagName}#${target.id || 'body'}...`, 'info');
-      } catch (e) {
-        log(`Pointer Lock request threw an exception: ${e.message}`, 'error');
-      }
     } else {
-      log('Pointer Lock API not supported on this element or browser.', 'error');
+      const target = (currentStageElement === stage && stage.contentWindow && stage.contentWindow.document.body) ? stage.contentWindow.document.body : currentStageElement;
+      if (target.requestPointerLock) target.requestPointerLock();
     }
   });
   updatePointerLockBtn();
 </script>
 <script>
-  // Initial setup: ensure the stage element is focusable
   stage.setAttribute("tabindex", "0");
-  
   stage.addEventListener("load", () => {
-    const w = stage.contentWindow;
-
-    // 1. Setup focus listeners immediately after load
     setupFocusListeners(); 
-    handleStageFocus(false); // Start in unfocused state (red border)
-
-    // 2. Reset/Shim Local Storage (Ensures memory map is fresh for every game)
-    log('Iframe loaded. Attempting to reset memory map (localStorage shim)...');
-    try {
-      const t = "__runner_storage_test__";
-      w.localStorage.setItem(t, "1");
-      w.localStorage.removeItem(t);
-      log('SUCCESS: Native localStorage access confirmed and reset.', 'info');
-    } catch (_) {
-      const mem = new Map(); 
-      w.localStorage = {
-        getItem(k){ return mem.has(k) ? mem.get(k) : null; },
-        setItem(k,v){ mem.set(String(k), String(v)); },
-        removeItem(k){ mem.delete(k); },
-        clear() {
-          mem.clear();
-          log('SHIM: In-memory map cleared for new game.', 'warn');
-        },
-        key(i) {
-          return Array.from(mem.keys())[i] ?? null;
-        },
-        get length() {
-          return mem.size;
-        }
-      };
-      w.sessionStorage = w.sessionStorage ?? w.localStorage; 
-      log('SHIM APPLIED: Using in-memory shim for persistence. Memory map reset complete.', 'warn');
-    }
-
-    // 3. Delayed Focus (Crucial for Unity engine start and input readiness)
-    setTimeout(() => {
-        // Only focus the outer iframe/stage element. Let the user click inside to get full input.
-        stage.focus(); 
-        log('Engine start: Applied delayed focus. Game is ready for the first click.', 'info');
-    }, 100); 
+    handleStageFocus(false); 
+    setTimeout(() => { stage.focus(); }, 100); 
   });
 </script>
 <script>
-  // Forward keyboard events (especially arrow keys) to the iframe
   window.addEventListener("keydown", (e) => {
-    // Prevent default scroll behavior for arrow keys and space when running a game
     if (currentStageElement.classList.contains('focused') && 
         ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight", "Space"].includes(e.key)) {
       e.preventDefault();
     }
-    
-    // Dispatch event to the iframe content if it's the current stage
     if (currentStageElement === stage && stage.contentWindow) {
       const forwarded = new KeyboardEvent("keydown", {
-        key: e.key,
-        code: e.code,
-        keyCode: e.keyCode,
-        which: e.which,
-        altKey: e.altKey,
-        ctrlKey: e.ctrlKey,
-        shiftKey: e.shiftKey,
-        metaKey: e.metaKey,
-        bubbles: true,
-        cancelable: true
+        key: e.key, code: e.code, keyCode: e.keyCode, which: e.which,
+        altKey: e.altKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, metaKey: e.metaKey,
+        bubbles: true, cancelable: true
       });
       stage.contentWindow.dispatchEvent(forwarded);
     }
   });
   
-  // Try to force focus into the iframe/game on any click on the runner page
   document.body.addEventListener('click', () => {
     if (currentStageElement) {
         currentStageElement.focus();
-        
-        // For HTML/Unity games, attempt to focus the inner body for the most complete input capture
         if (currentStageElement === stage && stage.contentWindow && stage.contentWindow.document.body) {
             stage.contentWindow.document.body.focus();
         }
