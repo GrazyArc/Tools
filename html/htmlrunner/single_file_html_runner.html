@@ -8,9 +8,12 @@
     :root { color-scheme: dark; }
     body {
       margin: 0;
+      padding: 0; /* Ensures the body fits the window */
       font-family: system-ui, sans-serif;
       background: #121212;
       color: #eee;
+      /* Prevent accidental scrolling outside of the game area */
+      overflow: hidden; 
     }
     header {
       display: flex;
@@ -21,6 +24,7 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.6);
       border-radius: 0 0 12px 12px;
       z-index: 10;
+      height: 46px; /* Fixed height for header content */
     }
     label.btn {
       background: #2a2a2a;
@@ -43,13 +47,35 @@
       min-width: 150px;
     }
     #status { flex: 1; font-size: 14px; opacity: 0.8; }
+    
+    /* NEW: Container to manage the full height below the header */
+    #stageContainer {
+      padding: 12px;
+      height: calc(100vh - 46px - 24px); /* 46px (header) + 24px (top/bottom padding) */
+      box-sizing: border-box;
+    }
+
     .stage-element {
       width: 100%;
-      height: calc(100vh - 70px);
-      border: none;
+      height: 100%; /* Fill the container */
+      border: 3px solid #333; /* Default border */
       border-radius: 12px;
       box-shadow: 0 0 12px rgba(0,0,0,0.7);
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
+    
+    /* NEW: Visual cue when the element has focus */
+    .stage-element.focused {
+      border-color: #4caf50; /* Green border when focused */
+      box-shadow: 0 0 20px rgba(76, 175, 80, 0.7);
+    }
+    
+    /* NEW: Visual cue when the element loses focus */
+    .stage-element.blurry {
+      border-color: #f44336; /* Red border when unfocused */
+      box-shadow: 0 0 20px rgba(244, 67, 54, 0.7);
+    }
+    
     #fullscreenBtn {
       position: fixed;
       top: 12px;
@@ -66,7 +92,24 @@
       transition: opacity 0.3s;
       z-index: 1000;
     }
-    #fullscreenBtn:hover { opacity: 1; }
+    /* Style for Lock Cursor Button */
+    #lockCursorBtn {
+      position: fixed;
+      top: 12px;
+      right: 60px;
+      background: #2a2a2a;
+      color: #eee;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      opacity: 0.3;
+      transition: opacity 0.3s;
+      z-index: 1000;
+    }
+    #fullscreenBtn:hover, #lockCursorBtn:hover { opacity: 1; }
     #progressContainer {
       position: fixed;
       bottom: 0;
@@ -88,8 +131,8 @@
         position: fixed;
         bottom: 0;
         right: 0;
-        width: 400px; /* Increased width */
-        max-height: 50vh; /* Increased height */
+        width: 400px;
+        max-height: 50vh;
         background: rgba(0, 0, 0, 0.85);
         border: 1px solid #333;
         border-radius: 8px 0 0 0;
@@ -101,7 +144,7 @@
         z-index: 20;
         box-shadow: -4px -4px 10px rgba(0, 0, 0, 0.5);
         transition: transform 0.3s ease-in-out;
-        transform: translateY(0); /* Start visible */
+        transform: translateY(0);
     }
     #debugConsole.hidden {
         transform: translateY(100%);
@@ -143,11 +186,16 @@
     <div id="status">No file loaded</div>
   </header>
 
-  <iframe id="stage" class="stage-element"
-          sandbox="allow-scripts allow-same-origin allow-downloads allow-pointer-lock allow-forms allow-modals"
-          referrerpolicy="no-referrer">
-  </iframe>
+  <div id="stageContainer">
+    <iframe id="stage" class="stage-element blurry"
+            tabindex="0"
+            sandbox="allow-scripts allow-same-origin allow-downloads allow-pointer-lock allow-forms allow-modals allow-fullscreen"
+            allowfullscreen
+            referrerpolicy="no-referrer">
+    </iframe>
+  </div>
   
+  <button id="lockCursorBtn" title="Click to lock cursor (for FPS games)">🔒</button>
   <button id="fullscreenBtn">⛶</button>
   <div id="progressContainer"><div id="progressBar"></div></div>
 
@@ -163,37 +211,36 @@
 <script>
   const statusEl = document.getElementById('status');
   const stage = document.getElementById('stage');
-  let currentStageElement = stage; // Track the currently active stage (iframe or swf div)
+  const stageContainer = document.getElementById('stageContainer');
+  let currentStageElement = stage;
   const zipInput = document.getElementById('zip');
   const htmlInput = document.getElementById('htmlFile');
   const swfInput = document.getElementById('swfFile');
   const fileSelect = document.getElementById('fileSelect');
   const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const lockCursorBtn = document.getElementById('lockCursorBtn');
   const progressBar = document.getElementById('progressBar');
   const debugConsole = document.getElementById('debugConsole');
   const logContent = document.getElementById('logContent');
 
   let entries = {};
   let blobMap = {};
-  let mapKeys = []; // Stores all full paths from the ZIP for accurate prefix checking
+  let mapKeys = [];
 
   // Global logging function
   function log(message, type = 'info') {
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const formattedMessage = `[${timestamp}] ${message}`;
     
-    // Log to browser console
     if (type === 'error') console.error(formattedMessage);
     else if (type === 'warn') console.warn(formattedMessage);
     else console.log(formattedMessage);
 
-    // Log to on-screen console
     const logItem = document.createElement('div');
     logItem.className = `log-item ${type}`;
     logItem.textContent = formattedMessage;
     logContent.appendChild(logItem);
     
-    // Auto-scroll to bottom
     logContent.scrollTop = logContent.scrollHeight;
   }
 
@@ -202,14 +249,59 @@
     debugConsole.classList.toggle('hidden');
   });
 
+  // Function to handle focus state and visual cue (Red/Green)
+  function handleStageFocus(isFocused) {
+      const targetElement = currentStageElement; 
+      if (!targetElement) return;
+
+      if (isFocused) {
+          targetElement.classList.add('focused');
+          targetElement.classList.remove('blurry');
+          log('Game Stage gained input focus (clicks/keys captured).', 'info');
+      } else {
+          targetElement.classList.remove('focused');
+          targetElement.classList.add('blurry');
+          log('Game Stage lost input focus. Click on the game to continue.', 'warn');
+      }
+  }
+
+  // Set up focus/blur listeners on the stage element and its contents
+  function setupFocusListeners() {
+      // Clean up previous listeners if they exist
+      currentStageElement.removeEventListener('focus', () => handleStageFocus(true));
+      currentStageElement.removeEventListener('blur', () => handleStageFocus(false));
+
+      // Add listeners to the main stage element (iframe or div)
+      currentStageElement.addEventListener('focus', () => handleStageFocus(true));
+      currentStageElement.addEventListener('blur', () => handleStageFocus(false));
+      
+      // Crucial: For the iframe, we also need to detect focus on the inner document body
+      if (currentStageElement === stage && stage.contentWindow) {
+          try {
+             // Use capture phase (true) to catch events bubbling up from the inner document
+             stage.contentWindow.addEventListener('focus', () => handleStageFocus(true), true);
+             stage.contentWindow.addEventListener('blur', () => handleStageFocus(false), true);
+          } catch (e) {
+             // Fails if contentWindow is cross-origin or restricted
+             log(`Could not attach contentWindow focus listeners: ${e.message}`, 'error');
+          }
+      }
+  }
+
   // Utility function to reset the display to the original iframe
   function resetStageToIframe() {
+    // 1. Remove Ruffle container if it exists
     const swfStage = document.getElementById('swfStage');
     if (swfStage && swfStage.parentNode) {
       swfStage.replaceWith(stage);
       currentStageElement = stage;
       stage.classList.add('stage-element');
+      // Set the default unfocused state
+      stage.classList.add('blurry'); 
+      stage.classList.remove('focused');
     }
+    // 2. Setup listeners for the iframe
+    setupFocusListeners();
   }
 </script>
 <script>
@@ -219,7 +311,6 @@
     if (lower.endsWith('.js')) return 'application/javascript';
     if (lower.endsWith('.css')) return 'text/css';
     if (lower.endsWith('.wasm')) return 'application/wasm';
-    // Unity specific file types (data, unityweb)
     if (lower.includes('.data') || lower.includes('.unityweb')) return 'application/octet-stream'; 
     if (lower.endsWith('.json')) return 'application/json';
     if (lower.endsWith('.png')) return 'image/png';
@@ -233,7 +324,7 @@
     return 'application/octet-stream';
   }
 
-  // This global function is the one the injected shim calls, with enhanced directory prefix logic.
+  // Path resolution function used by the injected shim inside the game iframe
   window.runnerResolveBlobUrl = function(path) {
     if (!path) {
         log(`INTERNAL ERROR: runnerResolveBlobUrl called with null/empty path.`, 'error');
@@ -242,11 +333,8 @@
     const pathString = String(path);
     log(`ENGINE REQUEST: Looking for path "${pathString}"...`, 'info');
     
-    // Clean path: remove quotes, leading './' or '/' and query strings
     const clean = pathString.replace(/^["']|["']$/g, '').replace(/^\.?\/+/, '').split(/[?#]/)[0];
 
-    // 1. Check for Exact File Match (Highest Priority)
-    // Thanks to the aggressive mapping, this catches full paths and common relative paths.
     const resolvedUrl = blobMap[clean] || null;
 
     if (resolvedUrl) {
@@ -254,7 +342,6 @@
         return resolvedUrl;
     }
 
-    // 2. Check for Directory/Prefix Match
     const dirPrefix = clean + '/';
     const isDirectoryPrefix = mapKeys.some(key => key.startsWith(dirPrefix));
 
@@ -263,28 +350,24 @@
         return pathString; 
     }
     
-    // 3. Fallback for known Unity folders (Crucial for handling the "StreamingAssets" type of request)
     const knownUnityFolders = ['StreamingAssets', 'TemplateData', 'Build', 'Data'];
     if (knownUnityFolders.includes(clean)) {
          log(`FALLBACK RESOLVE (Known Folder): "${pathString}" is a common Unity folder, returning original path to allow engine lookup.`, 'warn');
          return pathString;
     }
 
-    // 4. Failure
     log(`FAILED TO RESOLVE: No file or folder found for "${pathString}". This is likely the missing resource.`, 'error');
-    return pathString; // Return original path to let the engine try and fail with a network error we can debug.
+    return pathString; 
   }
 
-  // Patches the HTML content to replace relative paths with blob: URLs and apply Unity fixes
+  // Patches HTML content to use Blob URLs and inject the path shim
   function patchHtmlWithBlobs(name) {
     let raw = new TextDecoder().decode(entries[name]);
     let patchesApplied = 0;
     
-    // --- PATCH 1: Standard attribute replacement (src, href) ---
     raw = raw.replace(/(src|href|poster)=["']([^"']+)["']/gi, (match, attr, path) => {
       if (/^(https?:)?\/\//i.test(path)) return match;
       const blobUrl = window.runnerResolveBlobUrl(path);
-      // Only modify if we got a blob URL (exact file match), not if it returned the original path (directory match)
       if (blobUrl && blobUrl.startsWith('blob:')) {
           patchesApplied++;
           return `${attr}="${blobUrl}"`;
@@ -292,10 +375,8 @@
       return match;
     });
 
-    // --- PATCH 2: Unity Config URL Replacement (dataUrl, frameworkUrl, codeUrl, etc.) ---
     raw = raw.replace(/(\w+Url\s*:\s*["'])([^"']+)(["'])/g, (match, prefix, path, suffix) => {
         const blobUrl = window.runnerResolveBlobUrl(path);
-        // Only modify if we got a blob URL (exact file match), not if it returned the original path (directory match)
         if (blobUrl && blobUrl.startsWith('blob:')) {
             patchesApplied++;
             return `${prefix}${blobUrl}${suffix}`;
@@ -303,22 +384,17 @@
         return match;
     });
 
-    // --- PATCH 3: Disable Web Workers (CRUCIAL for sandboxed iframe/blob: URLs) ---
     raw = raw.replace(/(useWebWorkers\s*:\s*|webWorkerUrl\s*:\s*).+/g, (match) => {
         patchesApplied++;
         log('PATCHED: Disabled Web Workers to force single-threaded mode.', 'warn');
         return `useWebWorkers: false, // Patched by ZIP Runner to force single-threaded mode`;
     });
     
-    // --- PATCH 4: Aggressive filename replacement (Fallback for paths deep in scripts) ---
     for (const [fname, blobUrl] of Object.entries(blobMap)) {
-      // Only match on full blob URLs (exact files)
       if (!blobUrl || !blobUrl.startsWith('blob:')) continue; 
       
       const safe = fname.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      // Only replace paths that are exactly surrounded by single or double quotes
       raw = raw.replace(new RegExp(`(["'])${safe}\\1`, 'g'), (match, quote) => {
-        // Check if the replacement hasn't already occurred for this specific file
         if (raw.includes(match)) {
             patchesApplied++;
             return `${quote}${blobUrl}${quote}`;
@@ -327,17 +403,13 @@
       });
     }
 
-    // --- PATCH 5: INJECT Module.locateFile SHIM (CRITICAL for dynamic loading like StreamingAssets) ---
     const injectionScriptContent = 
         '<script>\n' +
         '  // UNITY PATH RESOLUTION SHIM\n' +
-        '  // Intercepts all file requests (wasm, data, framework, streaming assets) and routes them to the Blob URLs\n' +
-        '  // by calling the parent window\'s file resolution logic.\n' +
         '  if (typeof Module === \'undefined\') { var Module = {}; }\n' +
         '\n' +
         '  Module.locateFile = function(path) {\n' +
         '    try {\n' +
-        '        // IMPORTANT: We call the resolution function defined in the parent runner window.\n' +
         '        const resolvedUrl = window.parent.runnerResolveBlobUrl(path);\n' +
         '        if (resolvedUrl) {\n' +
         '            return resolvedUrl;\n' +
@@ -345,11 +417,9 @@
         '    } catch (e) {\n' +
         '        console.error(\'UNITY SHIM ERROR:\', e);\n' +
         '    }\n' +
-        '    // Fallback if not found in our map or if the runner returned the original path (directory prefix)\n' +
         '    return path; \n' +
         '  };\n' +
         '  \n' +
-        '  // Also shim file fetching for older Unity versions\n' +
         '  if (typeof UnityLoader === \'object\' && typeof UnityLoader.locateFile === \'function\') {\n' +
         '      UnityLoader.locateFile = Module.locateFile;\n' +
         '  }\n' +
@@ -357,7 +427,6 @@
         '  console.log(\'Runner: Module.locateFile shim injected successfully.\');\n' +
         '<\/script>\n';
 
-    // Replace the closing body tag with the script content followed by the closing body tag
     raw = raw.replace(/<\/body>/i, injectionScriptContent + '</body>');
 
     log(`HTML Patching Complete. Total patches applied: ${patchesApplied}. Unity LocateFile Shim injected.`);
@@ -367,37 +436,35 @@
 <script>
   async function launchFile(name) {
     if (!entries[name]) return;
-    logContent.innerHTML = ''; // Clear log for new game
+    logContent.innerHTML = '';
     log(`Attempting to launch: ${name}`);
     const fileNameOnly = name.split('/').pop();
     
-    // Reset stage to the iframe before loading HTML content
     resetStageToIframe();
 
     if (fileNameOnly.toLowerCase().endsWith('.swf')) {
       const blobUrl = blobMap[fileNameOnly];
       
       const container = document.createElement('div');
-      container.id = "swfStage"; // Give it an ID to find later
-      container.className = "stage-element"; // Apply styling
+      container.id = "swfStage";
+      container.className = "stage-element blurry";
       
-      // Replace the iframe with the Ruffle container
       stage.replaceWith(container);
       currentStageElement = container;
-      
+      setupFocusListeners();
+
       const ruffle = window.RufflePlayer.newest();
       const player = ruffle.createPlayer();
       player.style.width = "100%";
       player.style.height = "100%";
       container.appendChild(player);
+      
       player.load(blobUrl);
-
       statusEl.textContent = `Running SWF: ${name}`;
       log(`SWF content loaded into Ruffle.`, 'info');
       return;
     }
     
-    // HTML/Unity Launch Logic
     try {
       const patched = patchHtmlWithBlobs(name);
       const blob = new Blob([patched], { type: 'text/html' });
@@ -415,8 +482,8 @@
     const file = zipInput.files?.[0];
     if (!file) return;
     
-    resetStageToIframe(); // Always reset before a new ZIP load
-    logContent.innerHTML = ''; // Clear log for new load
+    resetStageToIframe();
+    logContent.innerHTML = '';
     
     statusEl.textContent = `Reading ZIP: ${file.name}…`;
     log(`Starting ZIP extraction for ${file.name}.`);
@@ -427,7 +494,7 @@
 
         const unzipped = fflate.unzipSync(buf);
         const names = Object.keys(unzipped);
-        mapKeys = names; // Store the full list of names for accurate prefix checking
+        mapKeys = names;
         const total = names.length;
         entries = {};
         blobMap = {};
@@ -437,7 +504,6 @@
           const path = names[idx];
           const bytes = unzipped[path];
           
-          // Skip directories (paths ending in /)
           if (path.endsWith('/')) continue;
 
           entries[path] = bytes;
@@ -445,15 +511,11 @@
           const blob = new Blob([bytes], { type: mimeType(path) });
           const url = URL.createObjectURL(blob);
           
-          // Store under full path
           blobMap[path] = url;
           
-          // AGGRESSIVE MAPPING: Store under every possible relative path
           const parts = path.split('/');
-          // Start from i=0 to include the full path name which handles deep paths better
           for (let i = 0; i < parts.length - 1; i++) { 
             const subPath = parts.slice(i + 1).join('/');
-            // Only add if it doesn't create an ambiguity with a higher priority path
             if (!blobMap[subPath]) {
               blobMap[subPath] = url;
             }
@@ -504,7 +566,6 @@
     
     try {
         const raw = await file.text();
-        // Skip patching for single file load since external resources aren't available anyway
         const blob = new Blob([raw], { type: 'text/html' });
         stage.src = URL.createObjectURL(blob);
         statusEl.textContent = `Running: ${file.name}`;
@@ -534,10 +595,11 @@
         
         const container = document.createElement('div');
         container.id = "swfStage";
-        container.className = "stage-element";
+        container.className = "stage-element blurry";
         
         currentStageElement.replaceWith(container);
         currentStageElement = container;
+        setupFocusListeners();
 
         const ruffle = window.RufflePlayer.newest();
         const player = ruffle.createPlayer();
@@ -547,13 +609,6 @@
         
         player.load(blobUrl);
         statusEl.textContent = `Running SWF: ${file.name}`;
-        
-        fileSelect.innerHTML = '';
-        const opt = document.createElement('option');
-        opt.value = file.name;
-        opt.textContent = file.name;
-        fileSelect.appendChild(opt);
-        fileSelect.value = file.name;
         log(`SWF content loaded into Ruffle.`, 'info');
     } catch (e) {
         log(`Error loading single SWF file: ${e.message}`, 'error');
@@ -562,25 +617,86 @@
 </script>
 <script>
   fullscreenBtn.addEventListener('click', () => {
-    const elem = currentStageElement; // Use the currently active stage element
+    const elem = currentStageElement;
     if (!document.fullscreenElement) {
-      if (elem.requestFullscreen) elem.requestFullscreen();
-      else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-      else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+      try {
+        if (elem.requestFullscreen) elem.requestFullscreen();
+        else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+        else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+        else {
+          log('Fullscreen API not supported by this browser.', 'error');
+        }
+      } catch (e) {
+        log(`Fullscreen request failed (Permission Denied). Error: ${e.message}`, 'error');
+      }
     } else {
       if (document.exitFullscreen) document.exitFullscreen();
       else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
       else if (document.msExitFullscreen) document.msExitFullscreen();
     }
   });
+
+  function updatePointerLockBtn() {
+    if (document.pointerLockElement) {
+      lockCursorBtn.textContent = '🔓';
+      lockCursorBtn.title = 'Click to release cursor lock';
+    } else {
+      lockCursorBtn.textContent = '🔒';
+      lockCursorBtn.title = 'Click to lock cursor (for FPS games)';
+    }
+  }
+
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement) {
+      log('Pointer Lock ACHIEVED successfully.', 'info');
+    } else {
+      log('Pointer Lock RELEASED (by user or system).', 'info');
+    }
+    updatePointerLockBtn();
+  });
+
+  document.addEventListener('pointerlockerror', (e) => {
+    log('Pointer Lock FAILED. This is likely due to parent iframe restrictions.', 'error');
+    updatePointerLockBtn();
+  });
+
+  lockCursorBtn.addEventListener('click', () => {
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+      return;
+    }
+    
+    const elem = currentStageElement;
+    let target = elem;
+    if (elem === stage && stage.contentWindow && stage.contentWindow.document.body) {
+        target = stage.contentWindow.document.body;
+    }
+
+    if (target.requestPointerLock) {
+      try {
+        target.requestPointerLock();
+        log(`Attempting to lock pointer to target: ${target.tagName}#${target.id || 'body'}...`, 'info');
+      } catch (e) {
+        log(`Pointer Lock request threw an exception: ${e.message}`, 'error');
+      }
+    } else {
+      log('Pointer Lock API not supported on this element or browser.', 'error');
+    }
+  });
+  updatePointerLockBtn();
 </script>
 <script>
+  // Initial setup: ensure the stage element is focusable
   stage.setAttribute("tabindex", "0");
   
   stage.addEventListener("load", () => {
     const w = stage.contentWindow;
 
-    // 1. Reset/Shim Local Storage (Ensures memory map is fresh for every game)
+    // 1. Setup focus listeners immediately after load
+    setupFocusListeners(); 
+    handleStageFocus(false); // Start in unfocused state (red border)
+
+    // 2. Reset/Shim Local Storage (Ensures memory map is fresh for every game)
     log('Iframe loaded. Attempting to reset memory map (localStorage shim)...');
     try {
       const t = "__runner_storage_test__";
@@ -588,7 +704,6 @@
       w.localStorage.removeItem(t);
       log('SUCCESS: Native localStorage access confirmed and reset.', 'info');
     } catch (_) {
-      // If native localStorage access fails (due to sandbox/origin limitations), use an in-memory map.
       const mem = new Map(); 
       w.localStorage = {
         getItem(k){ return mem.has(k) ? mem.get(k) : null; },
@@ -605,32 +720,28 @@
           return mem.size;
         }
       };
-      // For Unity, setting sessionStorage is often necessary too.
       w.sessionStorage = w.sessionStorage ?? w.localStorage; 
       log('SHIM APPLIED: Using in-memory shim for persistence. Memory map reset complete.', 'warn');
     }
 
-    // 2. Delayed Focus (Crucial for Unity engine start)
+    // 3. Delayed Focus (Crucial for Unity engine start and input readiness)
     setTimeout(() => {
-        stage.focus();
-        if (w.document.body) {
-            w.document.body.click(); // Simulate a click inside to activate audio/input
-            log('Engine start: Applied delayed focus and simulated click.', 'info');
-        } else {
-            log('Engine start: Applied delayed focus. Body not yet available for click.', 'warn');
-        }
-    }, 100); // Increased delay slightly to 100ms
+        // Only focus the outer iframe/stage element. Let the user click inside to get full input.
+        stage.focus(); 
+        log('Engine start: Applied delayed focus. Game is ready for the first click.', 'info');
+    }, 100); 
   });
 </script>
 <script>
   // Forward keyboard events (especially arrow keys) to the iframe
   window.addEventListener("keydown", (e) => {
-    // Prevent default scroll behavior for arrow keys
-    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight", "Space"].includes(e.key)) {
+    // Prevent default scroll behavior for arrow keys and space when running a game
+    if (currentStageElement.classList.contains('focused') && 
+        ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight", "Space"].includes(e.key)) {
       e.preventDefault();
     }
     
-    // Only forward if the iframe is the current stage element
+    // Dispatch event to the iframe content if it's the current stage
     if (currentStageElement === stage && stage.contentWindow) {
       const forwarded = new KeyboardEvent("keydown", {
         key: e.key,
@@ -650,8 +761,13 @@
   
   // Try to force focus into the iframe/game on any click on the runner page
   document.body.addEventListener('click', () => {
-    if (currentStageElement === stage) {
-        stage.focus();
+    if (currentStageElement) {
+        currentStageElement.focus();
+        
+        // For HTML/Unity games, attempt to focus the inner body for the most complete input capture
+        if (currentStageElement === stage && stage.contentWindow && stage.contentWindow.document.body) {
+            stage.contentWindow.document.body.focus();
+        }
     }
   });
 </script>
