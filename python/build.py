@@ -13,14 +13,15 @@ import textwrap
 import argparse
 from pathlib import Path
 
-from pathspec import PathSpec
-from cryptography.fernet import Fernet
+from pathspec import PathSpec # type: ignore
+from cryptography.fernet import Fernet # type: ignore
 
 # -----------------------------
 # CONFIGURATION
 # -----------------------------
-ENTRY = "main.py"
-OUTPUT_NAME = "main"
+ENTRY = "GEORGE.py"
+OUTPUT_NAME = "GEORGE"
+DEBUG = True  # flip this to False to silence debug output
 
 # Folders to ignore entirely
 IGNORE_DIRS = {
@@ -64,6 +65,11 @@ def parse_args():
         "--version",
         default="1.0.0",
         help="Version string for packages (default: 1.0.0)",
+    )
+    parser.add_argument(
+        "--debug-stream",
+        action="store_true",
+        help="Stream Nuitka output live (stdout + stderr)"
     )
     return parser.parse_args()
 
@@ -350,6 +356,56 @@ def build_arch_pkg(exe_path, data_dirs, version):
 
         print("    Built Arch package:", output_pkg)
 
+def run_nuitka_stream(cmd):
+    import threading
+    import queue
+
+    q = queue.Queue()
+
+    def reader(stream, tag):
+        for line in iter(stream.readline, ''):
+            q.put((tag, line.rstrip()))
+        stream.close()
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        bufsize=1
+    )
+
+    threads = [
+        threading.Thread(target=reader, args=(process.stdout, "OUT")),
+        threading.Thread(target=reader, args=(process.stderr, "ERR")),
+    ]
+
+    for t in threads:
+        t.daemon = True
+        t.start()
+
+    # Drain queue until process exits
+    while True:
+        try:
+            tag, line = q.get(timeout=0.1)
+            if tag == "OUT":
+                print("[Nuitka]", line)
+            else:
+                print("[Nuitka:ERR]", line)
+        except queue.Empty:
+            if process.poll() is not None:
+                break
+
+    # Final drain
+    while not q.empty():
+        tag, line = q.get()
+        if tag == "OUT":
+            print("[Nuitka]", line)
+        else:
+            print("[Nuitka:ERR]", line)
+
+    return process.returncode
+
 
 # -----------------------------
 # MAIN BUILD EXECUTION
@@ -360,13 +416,46 @@ def main():
     print("Building with Nuitka...")
     os.makedirs("build", exist_ok=True)
 
-    print("\n=== Environment Diagnostics ===")
-    print("Python:", sys.executable)
-    print("Python Version:", sys.version)
-    print("Platform:", platform.platform())
-    print("PATH:", os.environ.get("PATH"))
-    print("===============================\n")
+    # -----------------------------
+    # EXTENDED DEBUG SECTION
+    # -----------------------------
+    if DEBUG:
+        print("\n=== EXTENDED DEBUG MODE ENABLED ===")
+        print("Python Executable:", sys.executable)
+        print("Python Version:", sys.version)
+        print("Platform:", platform.platform())
+        print("Working Directory:", os.getcwd())
+        print("PATH Breakdown:")
+        for p in os.environ.get("PATH", "").split(":"):
+            print("   •", p)
+        print("\nInstalled Nuitka Version:")
+        try:
+            subprocess.run([sys.executable, "-m", "nuitka", "--version"], check=False)
+        except Exception as e:
+            print("   [!] Failed to query Nuitka version:", e)
 
+        print("\nChecking for UPX:")
+        print("   upx found:", shutil.which("upx"))
+
+        print("\nChecking for Clang:")
+        print("   clang found:", shutil.which("clang"))
+
+        print("\nChecking for GCC:")
+        print("   gcc found:", shutil.which("gcc"))
+
+        print("\nChecking for patchelf:")
+        print("   patchelf found:", shutil.which("patchelf"))
+
+        print("\nEnvironment Variables:")
+        for k, v in os.environ.items():
+            if k.startswith(("NUITKA", "PYTHON", "LD_", "PATH")):
+                print(f"   {k}={v}")
+
+        print("\n===================================\n")
+
+    # -----------------------------
+    # AUTO-DETECTION
+    # -----------------------------
     print("Auto-detecting packages and data directories...")
     packages, data_dirs = detect_packages_and_data()
 
@@ -378,31 +467,87 @@ def main():
     for d in data_dirs:
         print("   •", d)
 
+    # -----------------------------
+    # COMMAND GENERATION
+    # -----------------------------
     print("\nGenerating Nuitka command...\n")
     cmd = build_command(packages, data_dirs, args)
+
     print("COMMAND:")
     print(" ".join(cmd))
+
+    # -----------------------------
+    # PRE-FLIGHT CHECK
+    # -----------------------------
+    if DEBUG:
+        print("\n=== PRE-FLIGHT FILESYSTEM CHECK ===")
+        print("Entry file exists:", os.path.exists(ENTRY))
+        print("State folder exists:", os.path.isdir("state"))
+        print("Build folder exists:", os.path.isdir("build"))
+        print("====================================\n")
+
+    # -----------------------------
+    # RUN BUILD WITH LIVE OUTPUT
+    # -----------------------------
     print("\nRunning Nuitka...\n")
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True
-        )
+        if args.debug_stream:
+            rc = run_nuitka_stream(cmd)
+            if rc != 0:
+                print(f"[!] Nuitka failed with exit code {rc}")
+                sys.exit(rc)
+        else:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            print("\n=== STDOUT ===")
+            print(result.stdout)
+            print("\n=== STDERR ===")
+            print(result.stderr)
+            result.check_returncode()
 
-        print("\n=== STDOUT ===")
-        print(result.stdout)
-
-        print("\n=== STDERR ===")
-        print(result.stderr)
-
-        result.check_returncode()
         print("\nBuild complete!")
 
         exe_path = os.path.join("build", OUTPUT_NAME)
         if not os.path.exists(exe_path):
-            # Nuitka sometimes names the onefile with extension
+            candidate = Path("build") / (OUTPUT_NAME + ".bin")
+            if candidate.exists():
+                exe_path = str(candidate)
+
+        print("Executable generated:", exe_path)
+
+        if args.encrypt_data:
+            encrypt_data_payload(args, data_dirs)
+
+        build_deb(exe_path, data_dirs, args.version)
+        build_arch_pkg(exe_path, data_dirs, args.version)
+
+    except subprocess.CalledProcessError:
+        print("\nBuild failed — see logs above.")
+        sys.exit(1)
+
+        # Stream output live
+        if process.stdout is not None:
+            for line in process.stdout:
+                print("[Nuitka]", line.rstrip())
+
+        stderr_output = []
+        if process.stderr is not None:
+            for line in process.stderr:
+                stderr_output.append(line)
+                print("[Nuitka:ERR]", line.rstrip())
+
+        process.wait()
+
+        if process.returncode != 0:
+            print("\n[!] Nuitka failed with exit code:", process.returncode)
+            print("\n=== STDERR (captured) ===")
+            print("".join(stderr_output))
+            raise subprocess.CalledProcessError(process.returncode, cmd)
+
+        print("\nBuild complete!")
+
+        exe_path = os.path.join("build", OUTPUT_NAME)
+        if not os.path.exists(exe_path):
             candidate = Path("build") / (OUTPUT_NAME + ".bin")
             if candidate.exists():
                 exe_path = str(candidate)
@@ -417,25 +562,9 @@ def main():
         build_deb(exe_path, data_dirs, args.version)
         build_arch_pkg(exe_path, data_dirs, args.version)
 
-    except subprocess.CalledProcessError as e:
-        print("\nBuild failed with exit code:", e.returncode)
-
-        print("\n=== Captured STDOUT ===")
-        print(result.stdout)
-
-        print("\n=== Captured STDERR ===")
-        print(result.stderr)
-
-        nuitka_log_txt = os.path.join("build", "nuitka-crash-report.txt")
-        nuitka_log_xml = os.path.join("build", "nuitka-crash-report.xml")
-        for path in (nuitka_log_txt, nuitka_log_xml):
-            if os.path.exists(path):
-                print(f"\n=== Nuitka Crash Report ({os.path.basename(path)}) ===")
-                with open(path, "r", errors="ignore") as f:
-                    print(f.read())
-
+    except subprocess.CalledProcessError:
+        print("\nBuild failed — see logs above.")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
