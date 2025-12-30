@@ -71,6 +71,9 @@ def parse_args():
         action="store_true",
         help="Stream Nuitka output live (stdout + stderr)"
     )
+
+    parser.add_argument( "--torch-jit", choices=["auto", "enable", "disable"], default="disable", help="Control Nuitka Torch JIT mode (default: disable)" )
+
     return parser.parse_args()
 
 
@@ -166,20 +169,28 @@ def build_command(packages, data_dirs, args):
         cmd.append("--msvc=latest")
     else:
         cmd.append("--clang")
-        # Do NOT force static libpython; it bloats and often breaks on Arch
         cmd.append("--static-libpython=no")
+
         if args.upx:
             cmd.append("--onefile-compression=yes")
 
+    # Torch JIT handling
+    if args.torch_jit == "disable":
+        cmd.append("--module-parameter=torch-disable-jit=yes")
+    elif args.torch_jit == "enable":
+        cmd.append("--module-parameter=torch-disable-jit=no")
+    # auto = do nothing
+
+    # Include detected packages
     for pkg in packages:
         cmd.append(f"--include-package={pkg}")
 
-    # Only include data dirs we actually want. We’ll also use CORE_DATA_ROOTS.
+    # Include data dirs
     for d in data_dirs:
         if any(d == root or d.startswith(root + "/") for root in CORE_DATA_ROOTS):
             cmd.append(f"--include-data-dir={d}={d}")
 
-    # Ensure CORE_DATA_ROOTS are included even if auto-detection missed them
+    # Ensure CORE_DATA_ROOTS always included
     for root in CORE_DATA_ROOTS:
         if os.path.isdir(root):
             spec = f"--include-data-dir={root}={root}"
@@ -471,6 +482,9 @@ def main():
     # COMMAND GENERATION
     # -----------------------------
     print("\nGenerating Nuitka command...\n")
+
+    os.environ.setdefault("CFLAGS", "-Wno-macro-redefined") # Suppress _XOPEN_SOURCE warnings
+
     cmd = build_command(packages, data_dirs, args)
 
     print("COMMAND:")
