@@ -1,0 +1,1 @@
+qemu-system-x86_64   -enable-kvm   -m 4096   -smp 4   -cdrom ./out/OS-$(date +%Y.%m.%d)-x86_64.iso   -boot d
