@@ -1,3 +1,7 @@
 # build.py
 pathspec
 cryptography
+# TTS-openvoice-test.py
+openvoice
+# TTS-piper-download_model.py
+ps4
