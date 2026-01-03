@@ -72,6 +72,6 @@ def merge_checkpoint_to_model(checkpoint_dir, model_path=None, output_path="fina
 if __name__ == "__main__":
     checkpoint_dir = "./checkpoints"
     model_path = None  # Leave as None if you only have checkpoints
-    output_path = "TinyGEORGE.pt"
+    output_path = "TinyModel.pt"
     
     merge_checkpoint_to_model(checkpoint_dir, model_path, output_path)
