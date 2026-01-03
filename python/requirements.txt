@@ -5,3 +5,6 @@ cryptography
 openvoice
 # TTS-piper-download_model.py
 ps4
+# merge_pt.py
+torch
+pathlib
